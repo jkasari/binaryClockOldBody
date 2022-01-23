@@ -23,14 +23,14 @@
 
 DEFINE_GRADIENT_PALETTE(MAP_WHITEBLUE) {
     0, 0, 0, 255,
-    128, 50, 50, 155,
+    128, 0, 100, 155,
     255, 0, 0, 255
 };
 CRGBPalette16 WhiteBlue = MAP_WHITEBLUE;
 
 DEFINE_GRADIENT_PALETTE(MAP_WHITEGREEN) {
     0, 0, 250, 5,
-    128, 50, 100, 100,
+    128, 100, 100, 50,
     255, 0, 250, 5,
 };
 CRGBPalette16 WhiteGreen = MAP_WHITEGREEN;

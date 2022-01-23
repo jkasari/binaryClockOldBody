@@ -5,6 +5,13 @@
             "name": "Arduino",
             "compilerPath": "/home/jkasari/.arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/bin/avr-g++",
             "compilerArgs": [
+                "-u",
+                "--language-force=c++",
+                "-f",
+                "-",
+                "--c++-kinds=svpf",
+                "--fields=KSTtzns",
+                "--line-directives",
                 "-w",
                 "-std=gnu++11",
                 "-fpermissive",
