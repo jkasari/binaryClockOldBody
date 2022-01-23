@@ -16,6 +16,7 @@
 #define TIP_POINT 40000
 #define FADE_RATE 2
 #define RESET 500
+#define DOT_MOVE 700
 #define B_HIGH 100
 #define B_LOW 10
 #define BLANK CRGB(0,0,0)
@@ -372,7 +373,7 @@ class BitDots{
         int16_t yPull;
         uint8_t ColorIndex;
         bool Fading = false;
-        const int16_t pullLimit = 512;
+        const int16_t pullLimit = DOT_MOVE;
         inline static bool Locations[8][8];
         CRGBPalette16* ColorPalette;
         inline static CRGB FLEDS[LED_NUM];
@@ -732,12 +733,12 @@ class CompleteClock{
             
             case 1:
               ColorClock16Bit.updateTime(BitDotArr, RTC.now());
-              DotsInUse = Clock16Bit.requestNumOfDots();
+              DotsInUse = ColorClock16Bit.requestNumOfDots();
               break;
 
             case 2:
               ThreeByteClock.updateTime(BitDotArr, RTC.now());
-              DotsInUse - ThreeByteClock.requestNumOfDots();
+              DotsInUse = ThreeByteClock.requestNumOfDots();
               break;
           }
         }
@@ -747,15 +748,15 @@ class CompleteClock{
             case Action::ModeChange:
               switch (Controller.getMode()) {
                 case 0:
-                  BitDotArr[0].CLEAN_ALL_LOCATIONS();
+                  cleanSlate();
                   Clock16Bit.buildClock(BitDotArr);
                   break;
                 case 1:
-                  BitDotArr[0].CLEAN_ALL_LOCATIONS();
+                  cleanSlate();
                   ColorClock16Bit.buildClock(BitDotArr);
                   break;
                 case 2:
-                  BitDotArr[0].CLEAN_ALL_LOCATIONS();
+                  cleanSlate();
                   ThreeByteClock.buildClock(BitDotArr);
                   break;
               }
@@ -766,6 +767,13 @@ class CompleteClock{
           
             case Action::DoNothing:
               break;
+          }
+        }
+
+        void cleanSlate() {
+          BitDotArr[0].CLEAN_ALL_LOCATIONS();
+          for(int i = 0; i < BD_NUM; ++i) {
+            BitDotArr[i].setFixedLocation(-1, -1);
           }
         }
 
