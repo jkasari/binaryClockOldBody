@@ -17,7 +17,7 @@
 #define FADE_RATE 2
 #define RESET 500
 #define B_HIGH 100
-#define B_LOW 20
+#define B_LOW 10
 #define BLANK CRGB(0,0,0)
 
 
