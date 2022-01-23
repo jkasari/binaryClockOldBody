@@ -11,23 +11,38 @@
 #define BUTT_2 4
 #define BUTT_3 3
 #define MODE_LIM 3
+#define BACKG_NUM 1
 #define ACCEL_PORT 0x69
 #define TIP_POINT 40000
 #define FADE_RATE 4
 #define RESET 500
 #define B_HIGH 100
 #define B_LOW 20
+#define BLANK CRGB(0,0,0)
 
 
-DEFINE_GRADIENT_PALETTE(heatMap_gp) {
+DEFINE_GRADIENT_PALETTE(MAP_WHITEBLUE) {
     0, 0, 0, 255,
     0, 0, 255, 0,
     128, 50, 75, 125,
     0, 0, 255, 0,
     255, 0, 0, 255
 };
+CRGBPalette16 W0Y1 = MAP_WHITEBLUE;
 
-CRGBPalette16 W0Y1 = heatMap_gp;
+DEFINE_GRADIENT_PALETTE(MAP_FIRE) {
+    0, 100, 0, 0,
+    33, 75, 25, 0,
+    66, 100, 0, 0,
+    99, 50, 15, 0,
+    132, 75, 15, 0,
+    185, 80, 0, 0,
+    208, 100, 20, 0,
+    255, 70, 10, 0
+
+};
+CRGBPalette16 FireBackGround = MAP_FIRE;
+
 
 
 
@@ -170,6 +185,36 @@ class ControlBoard{
 
 };
 
+class BackGround{
+  public:
+      void createBackGround(CRGBPalette16 &palPoint, uint8_t rate) {
+        ColorPalette = palPoint;
+        Rate = rate;
+      }
+
+      void createBackGround(CRGB* color) {
+        SolidColor = color;
+      }
+
+      CRGB getColor() {
+        if (Rate > 0) {
+          EVERY_N_MILLISECONDS(Rate) {
+            Increment++;
+            if (Increment % Rate == 0) {
+              return ColorFromPalette(ColorPalette, Increment);
+            }
+          }
+        }
+        return *SolidColor;
+      }
+
+  private:
+      uint8_t Increment; 
+      uint8_t Rate = 0;
+      CRGBPalette16 ColorPalette;
+      CRGB* SolidColor = &BLANK;
+};
+
 /**
  * The bitdot class creates a led that will react to gravity along with chanign binary colors
  * Set the fixed location in the formation that you want the clock itself in 
@@ -191,6 +236,16 @@ class BitDots{
 
         void CLEAR_ALL_DOTS() {
           FastLED.clear();
+        }
+
+        void DISPLAY_BACKGROUND(BackGround &BackG) {
+          for (int i = 0; i < 8; ++i) {
+            for (int j = 0; j < 8; ++j) {
+              if (!Locations[i][j]) {
+                displayBackground(GetLineLocation(i, j), BackG);
+              }
+            }
+          }
         }
 
         void ALL_DOT_BRIGHTNESS(uint8_t bright) {
@@ -246,6 +301,10 @@ class BitDots{
             Locations[x][y] = true; // Put the dot locatio back with the clock formation
         }
 
+        uint8_t GetLineLocation(int8_t xTemp, int8_t yTemp) {
+            return xTemp + (yTemp * 8);
+        }
+
         uint8_t GetLineLocation() {
             return x + (y * 8);
         }
@@ -256,7 +315,9 @@ class BitDots{
         }
 
 
+
     private:
+        uint8_t BGFader;
         int8_t xFixed;
         int8_t yFixed;
         int8_t x;
@@ -304,6 +365,11 @@ class BitDots{
                   }
                 }
             }
+
+          void displayBackground(int8_t location, BackGround &BGColor) {
+            FLEDS[location] = BGColor.getColor();
+            //FLEDS[location] = ColorFromPalette(FireBackGround, location * 10);
+          }
 
 
 };
@@ -430,10 +496,25 @@ class CompleteClock{
             }
             BitDotArr[i].displayDot();
           }
-          BitDotArr[0].SHOW_ALL_DOTS();
-          BitDotArr[0].CLEAR_ALL_DOTS();
+          refreshDots();
           delay(1);
         }
+
+    private:
+        BitDots BitDotArr[BD_NUM];
+        RTC_DS1307 RTC;
+        SixteenBitWhiteClock Clock16Bit;
+        ControlBoard Controller;
+        ADXL313 Accelerometer;
+        bool GravityMode = false;
+        int16_t x;
+        int16_t y;
+        uint8_t DotsInUse = BD_NUM;
+        uint16_t tippingPoint = TIP_POINT;
+        uint32_t GravityModeTimer = 0;
+        uint32_t TimeLimit = RESET;
+        int8_t BackGIndex = 0;
+        BackGround BackGArr[BACKG_NUM];
 
         void readInputs() {
           if(Accelerometer.dataReady()) {
@@ -446,19 +527,6 @@ class CompleteClock{
           BitDotArr[0].ALL_DOT_BRIGHTNESS(Controller.getPRReading());
         }
 
-        void manageController() {
-          switch (Controller.buttonCheck()) {
-            case Action::ModeChange:
-              break;
-            
-            case Action::TimeAdjust:
-              break;
-          
-            case Action::DoNothing:
-              break;
-          }
-        }
-
         void manageGravityMode() {
           if (pow(y, 2) > tippingPoint) {
             GravityMode = true;
@@ -469,6 +537,19 @@ class CompleteClock{
           if (!isAClock() && GravityModeTimer > TimeLimit) {
             GravityMode = false;
             resetClock();
+          }
+        }
+
+        void manageController() {
+          switch (Controller.buttonCheck()) {
+            case Action::ModeChange:
+              break;
+            
+            case Action::TimeAdjust:
+              break;
+          
+            case Action::DoNothing:
+              break;
           }
         }
 
@@ -487,20 +568,15 @@ class CompleteClock{
           }
         }
 
+        void refreshDots() {
+          BitDotArr[0].DISPLAY_BACKGROUND(BackGArr[BackGIndex]);
+          BitDotArr[0].SHOW_ALL_DOTS();
+          BitDotArr[0].CLEAR_ALL_DOTS();
+        }
 
-    private:
-        BitDots BitDotArr[BD_NUM];
-        RTC_DS1307 RTC;
-        SixteenBitWhiteClock Clock16Bit;
-        ControlBoard Controller;
-        ADXL313 Accelerometer;
-        bool GravityMode = false;
-        int16_t x;
-        int16_t y;
-        uint8_t DotsInUse = BD_NUM;
-        uint16_t tippingPoint = TIP_POINT;
-        uint32_t GravityModeTimer = 0;
-        uint32_t TimeLimit = RESET;
+        void createBackGrounds() {
+          BackGArr[0].createBackGround(FireBackGround, 5);
+        }
 };
 
 
