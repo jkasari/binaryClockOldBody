@@ -11,7 +11,7 @@
 #define BUTT_2 4
 #define BUTT_3 3
 #define MODE_LIM 3
-#define BACKG_NUM 1
+#define BACKG_NUM 3
 #define ACCEL_PORT 0x69
 #define TIP_POINT 40000
 #define FADE_RATE 2
@@ -30,7 +30,7 @@ CRGBPalette16 WhiteBlue = MAP_WHITEBLUE;
 
 DEFINE_GRADIENT_PALETTE(MAP_WHITEGREEN) {
     0, 0, 250, 5,
-    128, 100, 100, 50,
+    128, 75, 150, 25,
     255, 0, 250, 5,
 };
 CRGBPalette16 WhiteGreen = MAP_WHITEGREEN;
@@ -122,7 +122,7 @@ class Button{
         uint8_t Port = 0;
 };
 
-enum class Action{ ModeChange, TimeAdjust, DoNothing};
+enum class Action{ ModeChange, TimeAdjust, DoNothing, BGChange};
 
 /**
 * The control board has control over all the external controls on the clock.
@@ -142,17 +142,25 @@ class ControlBoard{
 
 
 
-        uint8_t getMode() {
+        int8_t getMode() {
             return Mode;
+        }
+
+        int8_t getBGIndex() {
+            return BGIndex;
         }
         
         Action buttonCheck() { // Returns true if it's time to go into time adjust mode
             uint32_t count = MainButt.check();
             if (count > 1) {
-                if (HalfSecond > count) {Mode++; return Action::ModeChange;}
-                if (count > HalfSecond && MultiSecond > count) {Mode--; return Action::ModeChange;}
+                if (HalfSecond > count) {Mode++; modeLimitCheck(); return Action::ModeChange;}
+                if (count > HalfSecond && MultiSecond > count) {Mode--; modeLimitCheck(); return Action::ModeChange;}
                 if (count > MultiSecond) {adjustMode = !adjustMode;}
-                ModeLimitCheck();
+            }
+            count = HourButt.check();
+            if (count > 1) {
+              if (HalfSecond > count) {BGIndex++; BGLimitCheck(); return Action::BGChange;}
+              if (count > HalfSecond && MultiSecond > count) {BGIndex--; BGLimitCheck(); return Action::BGChange;}
             }
             if (adjustMode) {
               return Action::TimeAdjust;
@@ -192,13 +200,23 @@ class ControlBoard{
         const uint16_t HalfSecond = 500;
         const uint16_t MultiSecond = 5000;
         int8_t Mode = 0;
+        int8_t BGIndex = 0;
         bool adjustMode = false;
-        void ModeLimitCheck() {
+        void modeLimitCheck() {
             if (Mode >= MODE_LIM) {
                 Mode = 0;
             } 
             if (0 > Mode) {
                 Mode = MODE_LIM - 1;
+            }
+        }
+
+        void BGLimitCheck() {
+            if (BGIndex >= BACKG_NUM) {
+                BGIndex = 0;
+            } 
+            if (0 > BGIndex) {
+                BGIndex = BACKG_NUM - 1;
             }
         }
 
@@ -605,7 +623,6 @@ class CompleteClock{
         uint16_t tippingPoint = TIP_POINT;
         uint32_t GravityModeTimer = 0;
         uint32_t TimeLimit = RESET;
-        int8_t BackGIndex = 1;
         BackGround BackGArr[BACKG_NUM];
 
         void readInputs() {
@@ -688,14 +705,15 @@ class CompleteClock{
         }
 
         void refreshDots() {
-          BitDotArr[0].DISPLAY_BACKGROUND(BackGArr[BackGIndex]);
+          BitDotArr[0].DISPLAY_BACKGROUND(BackGArr[Controller.getBGIndex()]);
           BitDotArr[0].SHOW_ALL_DOTS();
           BitDotArr[0].CLEAR_ALL_DOTS();
         }
 
         void createBackGrounds() {
-          BackGArr[0].createBackGround(&FireBackGround, 5);
+          BackGArr[0].createBackGround(CRGB(0,0,0));
           BackGArr[1].createBackGround(CRGB(15, 25, 5));
+          BackGArr[2].createBackGround(&FireBackGround, 25);
         }
 };
 
