@@ -14,7 +14,7 @@
 #define BACKG_NUM 1
 #define ACCEL_PORT 0x69
 #define TIP_POINT 40000
-#define FADE_RATE 4
+#define FADE_RATE 2
 #define RESET 500
 #define B_HIGH 100
 #define B_LOW 20
@@ -23,12 +23,31 @@
 
 DEFINE_GRADIENT_PALETTE(MAP_WHITEBLUE) {
     0, 0, 0, 255,
-    0, 0, 255, 0,
-    128, 50, 75, 125,
-    0, 0, 255, 0,
+    128, 50, 50, 155,
     255, 0, 0, 255
 };
-CRGBPalette16 W0Y1 = MAP_WHITEBLUE;
+CRGBPalette16 WhiteBlue = MAP_WHITEBLUE;
+
+DEFINE_GRADIENT_PALETTE(MAP_WHITEGREEN) {
+    0, 0, 250, 5,
+    128, 50, 100, 100,
+    255, 0, 250, 5,
+};
+CRGBPalette16 WhiteGreen = MAP_WHITEGREEN;
+
+DEFINE_GRADIENT_PALETTE(MAP_ORGRED) {
+    0, 230, 0, 15,
+    128, 150, 100, 0,
+    255, 230, 0, 15
+};
+CRGBPalette16 OrangeRed = MAP_ORGRED;
+
+DEFINE_GRADIENT_PALETTE(MAP_YLWWHITE) {
+    0, 75, 75, 75,
+    128, 150, 100, 0,
+    255, 75, 75, 75
+};
+CRGBPalette16 YellowWhite = MAP_YLWWHITE;
 
 DEFINE_GRADIENT_PALETTE(MAP_FIRE) {
     0, 100, 0, 0,
@@ -187,12 +206,13 @@ class ControlBoard{
 
 class BackGround{
   public:
-      void createBackGround(CRGBPalette16 &palPoint, uint8_t rate) {
+      // Doesn't work
+      void createBackGround(CRGBPalette16 *palPoint, uint8_t rate) {
         ColorPalette = palPoint;
         Rate = rate;
       }
 
-      void createBackGround(CRGB* color) {
+      void createBackGround(CRGB color) {
         SolidColor = color;
       }
 
@@ -201,18 +221,18 @@ class BackGround{
           EVERY_N_MILLISECONDS(Rate) {
             Increment++;
             if (Increment % Rate == 0) {
-              return ColorFromPalette(ColorPalette, Increment);
+              return ColorFromPalette(*ColorPalette, Increment);
             }
           }
         }
-        return *SolidColor;
+        return SolidColor;
       }
 
   private:
       uint8_t Increment; 
       uint8_t Rate = 0;
-      CRGBPalette16 ColorPalette;
-      CRGB* SolidColor = &BLANK;
+      CRGBPalette16 *ColorPalette;
+      CRGB SolidColor = BLANK;
 };
 
 /**
@@ -424,37 +444,34 @@ class SixteenBitWhiteClock:ClockDisplay{
             if (temp > 12) {
               temp -= 12;
             }
-            for (int i = 3; i >= 0; --i) {
-              int32_t powOfTwo = 0.5 + pow(2, i);
-              if (temp - powOfTwo >=0 && temp !=  0) {
-                temp -= powOfTwo;
+            for (int i = 0; i < 4; ++i) {
+              if (temp % 2 == 1) {
                 bitArr[i].setToOne();
               } else {
                 bitArr[i].setToZero();
               }
+              temp /= 2;
             }
             // Set the bits for the minutes
             temp = now.minute();
-            for (int i = 9; i >= 4; --i) {
-              int32_t powOfTwo = 0.5 + pow(2, (i - 4));
-              if (temp - powOfTwo >=0 && temp != 0) {
-                temp -= powOfTwo;
+            for (int i = 4; i < 10; ++i) {
+              if (temp % 2 == 1) {
                 bitArr[i].setToOne();
               } else {
                 bitArr[i].setToZero();
               }
+              temp /= 2;
             }
           
             // set the bits for the seconds
             temp = now.second();
-            for (int i = 15; i >= 10; --i) {
-              int32_t powOfTwo = 0.5 + pow(2, (i - 10));
-              if (temp - powOfTwo >=0 && temp != 0) {
-                temp -= powOfTwo;
+            for (int i = 10; i < 16; ++i) {
+              if (temp % 2 == 1) {
                 bitArr[i].setToOne();
               } else {
                 bitArr[i].setToZero();
               }
+              temp /= 2;
             }
         }
 
@@ -464,7 +481,79 @@ class SixteenBitWhiteClock:ClockDisplay{
 
     private:
         void setColor(BitDots (&bitArr)[BD_NUM], uint8_t index) {
-            bitArr[index].setColorPalette(&W0Y1);
+            bitArr[index].setColorPalette(&YellowWhite);
+        }
+
+};
+
+
+class SixteenBitMultiColClock:ClockDisplay{
+    public:
+        void buildClock(BitDots (&bitArr)[BD_NUM]) {
+            int x = 0;
+            int y = 0;
+            for (int i = 0; i < 16; ++i) {
+              if (i < 4) {
+                y = 5 - i;
+                x = 6;
+                bitArr[i].setColorPalette(&OrangeRed);
+              } else if (i < 10 && 4 <= i) {
+                y = 10 - i;
+                x = 3;
+                bitArr[i].setColorPalette(&WhiteGreen);
+              } else if (10 <= i) {
+                y = 16 - i;
+                x = 1;
+                bitArr[i].setColorPalette(&WhiteBlue);
+              }
+              bitArr[i].setFixedLocation(x, y);
+              setColor(bitArr, i);
+            }
+        }     
+
+        void updateTime(BitDots (&bitArr)[BD_NUM], DateTime now) { // This desides what color to display the dot. 
+            //set the bits for the hours
+            int8_t temp = now.hour();
+            if (temp > 12) {
+              temp -= 12;
+            }
+            for (int i = 0; i < 4; ++i) {
+              if (temp % 2 == 1) {
+                bitArr[i].setToOne();
+              } else {
+                bitArr[i].setToZero();
+              }
+              temp /= 2;
+            }
+            // Set the bits for the minutes
+            temp = now.minute();
+            for (int i = 4; i < 10; ++i) {
+              if (temp % 2 == 1) {
+                bitArr[i].setToOne();
+              } else {
+                bitArr[i].setToZero();
+              }
+              temp /= 2;
+            }
+          
+            // set the bits for the seconds
+            temp = now.second();
+            for (int i = 10; i < 16; ++i) {
+              if (temp % 2 == 1) {
+                bitArr[i].setToOne();
+              } else {
+                bitArr[i].setToZero();
+              }
+              temp /= 2;
+            }
+        }
+
+        uint8_t requestNumOfDots() {
+          return 16;
+        }
+
+    private:
+        void setColor(BitDots (&bitArr)[BD_NUM], uint8_t index) {
         }
 
 };
@@ -484,12 +573,14 @@ class CompleteClock{
           BitDotArr[0].begin();
           RTC.begin();
           Clock16Bit.buildClock(BitDotArr);
+          createBackGrounds();
         }
 
         void runClock() {
           readInputs();
           manageController();
           manageGravityMode(); 
+          manageDisplayMode();
           for (int i = 0; i < DotsInUse; ++i) {
             if (GravityMode) {
               BitDotArr[i].moveDot(x, y);
@@ -504,6 +595,7 @@ class CompleteClock{
         BitDots BitDotArr[BD_NUM];
         RTC_DS1307 RTC;
         SixteenBitWhiteClock Clock16Bit;
+        SixteenBitMultiColClock ColorClock16Bit;
         ControlBoard Controller;
         ADXL313 Accelerometer;
         bool GravityMode = false;
@@ -513,17 +605,16 @@ class CompleteClock{
         uint16_t tippingPoint = TIP_POINT;
         uint32_t GravityModeTimer = 0;
         uint32_t TimeLimit = RESET;
-        int8_t BackGIndex = 0;
+        int8_t BackGIndex = 1;
         BackGround BackGArr[BACKG_NUM];
 
         void readInputs() {
           if(Accelerometer.dataReady()) {
             Accelerometer.readAccel(); // read all 3 axis, they are stored in class variables: myAdxl.x, myAdxl.y and myAdxl.z
           }
-          x = Accelerometer.x; // Accelerometer is on sideways in real life.
+          x = Accelerometer.x;
           y = Accelerometer.y;
-          Clock16Bit.updateTime(BitDotArr, RTC.now());
-          DotsInUse = Clock16Bit.requestNumOfDots();
+          Serial.println(Accelerometer.x);
           BitDotArr[0].ALL_DOT_BRIGHTNESS(Controller.getPRReading());
         }
 
@@ -540,9 +631,37 @@ class CompleteClock{
           }
         }
 
+        void manageDisplayMode() {
+          switch(Controller.getMode()) {
+            case 0:
+              Clock16Bit.updateTime(BitDotArr, RTC.now());
+              DotsInUse = Clock16Bit.requestNumOfDots();
+              break;
+            
+            case 1:
+              ColorClock16Bit.updateTime(BitDotArr, RTC.now());
+              DotsInUse = Clock16Bit.requestNumOfDots();
+              break;
+
+            case 2:
+              break;
+          }
+        }
+
         void manageController() {
           switch (Controller.buttonCheck()) {
             case Action::ModeChange:
+              switch (Controller.getMode()) {
+                case 0:
+                  Clock16Bit.buildClock(BitDotArr);
+                  break;
+                case 1:
+                  ColorClock16Bit.buildClock(BitDotArr);
+                  break;
+                case 2:
+                  Clock16Bit.buildClock(BitDotArr);
+                  break;
+              }
               break;
             
             case Action::TimeAdjust:
@@ -575,7 +694,8 @@ class CompleteClock{
         }
 
         void createBackGrounds() {
-          BackGArr[0].createBackGround(FireBackGround, 5);
+          BackGArr[0].createBackGround(&FireBackGround, 5);
+          BackGArr[1].createBackGround(CRGB(15, 25, 5));
         }
 };
 
