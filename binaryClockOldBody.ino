@@ -18,8 +18,11 @@
 #define RESET 500 // Time before the clock resest the dots
 #define DOT_MOVE 700 // The resistence for dot movment
 #define B_HIGH 200 // Brightness high limit
-#define B_LOW 10 // Brightness low limit
+#define B_LOW 2 // Brightness low limit
 #define BLANK CRGB(0,0,0) // A blank CRGB object.
+#define SIX_BIT 6 // Literally the number six.
+#define FOUR_BIT 4 // Literally the number 4
+#define BYTE 8 // Literally the number 8
 
 
 DEFINE_GRADIENT_PALETTE(MAP_WHITEBLUE) {
@@ -307,6 +310,16 @@ class BitDots{
           }
         }
 
+        void hardReset() {
+          xFixed = -1;
+          x = xFixed;
+          yFixed = -1;
+          y = yFixed;
+          ColorIndex = 0;
+          Fading = false;
+          IsAZero = true;
+        }
+
         void setFixedLocation(int8_t xSet, int8_t ySet) {
             xFixed = xSet;
             x = xFixed;
@@ -450,11 +463,75 @@ class ClockDisplay {
           return BitDotPointer[index];
         }
 
+        void buildBitDigitHorizontal(int8_t xStart, int8_t yStart, uint8_t index, uint8_t length) {
+          for (int i = 0; i < length; ++i) {
+            BitDotPointer[index + i].setFixedLocation(xStart, yStart - i);
+          }
+        }
+
+        void buildByteDigitVertical(int8_t xStart, int8_t yStart, uint8_t index) {
+          for (int i = 0; i < uint8_t(BYTE); ++i) {
+            if (i == uint8_t(FOUR_BIT)) {
+              yStart++;
+            }
+            BitDotPointer[index + i].setFixedLocation((xStart + i) % uint8_t(FOUR_BIT), yStart);
+          }
+        }
+
+        void displayTimeAlongDots(uint8_t index, uint8_t size, uint8_t digit) {
+          for (int i = index; i < (index + size); ++i) {
+            if (digit % 2 == 1) {
+              BitDotPointer[i].setToOne();
+            } else {
+              BitDotPointer[i].setToZero();
+            }
+            digit /= 2;
+          }
+        }
+
+        void setSecondsIndex(uint8_t secondsIndex) {SecondsIndex = secondsIndex;}
+        void setMinutesIndex(uint8_t minutesIndex) {MinutesIndex = minutesIndex;}
+        void setHoursIndex(uint8_t hoursIndex) {HoursIndex = hoursIndex;}
+        void setDotsNeeded(uint8_t dotsNeeded) {DotsNeeded = dotsNeeded;}
+        uint8_t getSecondsIndex() {return SecondsIndex;}
+        uint8_t getMinutesIndex() {return MinutesIndex;}
+        uint8_t getHoursIndex() {return HoursIndex;}
+        uint8_t getDotsNeeded() {return DotsNeeded;}
+
     private:
       inline static BitDots* BitDotPointer;
-
+      uint8_t SecondsIndex;
+      uint8_t MinutesIndex;
+      uint8_t HoursIndex;
+      uint8_t DotsNeeded;
 };
 
+
+class TestClock:ClockDisplay{
+  public:
+    void buildClock() {
+      setSecondsIndex(0);
+      setMinutesIndex(6);
+      setHoursIndex(12);
+      setDotsNeeded(16);
+      buildBitDigitHorizontal(1, 6, getSecondsIndex(), uint8_t(SIX_BIT));
+      buildBitDigitHorizontal(3, 6, getMinutesIndex(), uint8_t(SIX_BIT));
+      buildBitDigitHorizontal(6, 5, getHoursIndex(), uint8_t(FOUR_BIT));
+      for (int i = 0; i < 16; ++i) {
+        getBitDot(i).setColorPalette(&OrangeRed);
+      }
+    }
+
+    void updateTime(DateTime now) {
+      displayTimeAlongDots(getSecondsIndex(), uint8_t(SIX_BIT), now.second());
+      displayTimeAlongDots(getMinutesIndex(), uint8_t(SIX_BIT), now.minute());
+      displayTimeAlongDots(getHoursIndex(), uint8_t(FOUR_BIT), now.hour() % 12);
+    }
+
+    uint8_t requestNumOfDots() {
+      return getDotsNeeded();
+    }
+};
 
 /**
  * This displays time horizontally in 16 bits.
@@ -463,67 +540,29 @@ class ClockDisplay {
  * 
  */
 class SixteenBitWhiteClock:ClockDisplay{
-    public:
-        void buildClock() {
-            int x = 0;
-            int y = 0;
-            for (int i = 0; i < 16; ++i) {
-              if (i < 4) {
-                y = 5 - i;
-                x = 6;
-              } else if (i < 10 && 4 <= i) {
-                y = 10 - i;
-                x = 3;
-              } else if (10 <= i) {
-                y = 16 - i;
-                x = 1;
-              }
-              getBitDot(i).setFixedLocation(x, y);
-              getBitDot(i).setColorPalette(&YellowWhite);
-            }
-        }     
+  public:
+    void buildClock() {
+      setSecondsIndex(0);
+      setMinutesIndex(6);
+      setHoursIndex(12);
+      setDotsNeeded(16);
+      buildBitDigitHorizontal(1, 6, getSecondsIndex(), uint8_t(SIX_BIT));
+      buildBitDigitHorizontal(3, 6, getMinutesIndex(), uint8_t(SIX_BIT));
+      buildBitDigitHorizontal(6, 5, getHoursIndex(), uint8_t(FOUR_BIT));
+      for (int i = 0; i < 16; ++i) {
+        getBitDot(i).setColorPalette(&YellowWhite);
+      }
+    }
 
-        void updateTime(DateTime now) { // This desides what color to display the dot. 
-            //set the bits for the hours
-            int8_t temp = now.hour();
-            if (temp > 12) {
-              temp -= 12;
-            }
-            for (int i = 0; i < 4; ++i) {
-              if (temp % 2 == 1) {
-                getBitDot(i).setToOne();
-              } else {
-                getBitDot(i).setToZero();
-              }
-              temp /= 2;
-            }
-            // Set the bits for the minutes
-            temp = now.minute();
-            for (int i = 4; i < 10; ++i) {
-              if (temp % 2 == 1) {
-                getBitDot(i).setToOne();
-              } else {
-                getBitDot(i).setToZero();
-              }
-              temp /= 2;
-            }
-          
-            // set the bits for the seconds
-            temp = now.second();
-            for (int i = 10; i < 16; ++i) {
-              if (temp % 2 == 1) {
-                getBitDot(i).setToOne();
-              } else {
-                getBitDot(i).setToZero();
-              }
-              temp /= 2;
-            }
-        }
+    void updateTime(DateTime now) {
+      displayTimeAlongDots(getSecondsIndex(), uint8_t(SIX_BIT), now.second());
+      displayTimeAlongDots(getMinutesIndex(), uint8_t(SIX_BIT), now.minute());
+      displayTimeAlongDots(getHoursIndex(), uint8_t(FOUR_BIT), now.hour() % 12);
+    }
 
-        uint8_t requestNumOfDots() {
-          return 16;
-        }
-
+    uint8_t requestNumOfDots() {
+      return getDotsNeeded();
+    }
 };
 
 /**
@@ -532,70 +571,29 @@ class SixteenBitWhiteClock:ClockDisplay{
  * 
  */
 class SixteenBitMultiColClock:ClockDisplay{
-    public:
+  public:
+    void buildClock() {
+      setSecondsIndex(0);
+      setMinutesIndex(6);
+      setHoursIndex(12);
+      setDotsNeeded(16);
+      buildBitDigitHorizontal(1, 6, getSecondsIndex(), uint8_t(SIX_BIT));
+      buildBitDigitHorizontal(3, 6, getMinutesIndex(), uint8_t(SIX_BIT));
+      buildBitDigitHorizontal(6, 5, getHoursIndex(), uint8_t(FOUR_BIT));
+      for (int i = 0; i < 16; ++i) {
+        getBitDot(i).setColorPalette(&WhiteBlue);
+      }
+    }
 
-        void buildClock() {
-            int x = 0;
-            int y = 0;
-            for (int i = 0; i < 16; ++i) {
-              if (i < 4) {
-                y = 5 - i;
-                x = 6;
-                getBitDot(i).setColorPalette(&OrangeRed);
-              } else if (i < 10 && 4 <= i) {
-                y = 10 - i;
-                x = 3;
-                getBitDot(i).setColorPalette(&WhiteGreen);
-              } else if (10 <= i) {
-                y = 16 - i;
-                x = 1;
-                getBitDot(i).setColorPalette(&WhiteBlue);
-              }
-              getBitDot(i).setFixedLocation(x, y);
-            }
-        }     
+    void updateTime(DateTime now) {
+      displayTimeAlongDots(getSecondsIndex(), uint8_t(SIX_BIT), now.second());
+      displayTimeAlongDots(getMinutesIndex(), uint8_t(SIX_BIT), now.minute());
+      displayTimeAlongDots(getHoursIndex(), uint8_t(FOUR_BIT), now.hour() % 12);
+    }
 
-        void updateTime(DateTime now) { // This desides what color to display the dot. 
-            //set the bits for the hours
-            int8_t temp = now.hour();
-            if (temp > 12) {
-              temp -= 12;
-            }
-            for (int i = 0; i < 4; ++i) {
-              if (temp % 2 == 1) {
-                getBitDot(i).setToOne();
-              } else {
-                getBitDot(i).setToZero();
-              }
-              temp /= 2;
-            }
-            // Set the bits for the minutes
-            temp = now.minute();
-            for (int i = 4; i < 10; ++i) {
-              if (temp % 2 == 1) {
-                getBitDot(i).setToOne();
-              } else {
-                getBitDot(i).setToZero();
-              }
-              temp /= 2;
-            }
-          
-            // set the bits for the seconds
-            temp = now.second();
-            for (int i = 10; i < 16; ++i) {
-              if (temp % 2 == 1) {
-                getBitDot(i).setToOne();
-              } else {
-                getBitDot(i).setToZero();
-              }
-              temp /= 2;
-            }
-        }
-
-        uint8_t requestNumOfDots() {
-          return 16;
-        }
-
+    uint8_t requestNumOfDots() {
+      return getDotsNeeded();
+    }
 };
 
 /**
@@ -607,62 +605,25 @@ class ThreeByteColorClock:ClockDisplay{
   public:
   // Sets all the fixed x y values and sets the colors for the 3 byte clock.
         void buildClock() {
-          uint8_t x;
-          uint8_t y;
-          uint16_t color = 0; 
+          setSecondsIndex(0);
+          setMinutesIndex(8);
+          setHoursIndex(16);
+          setDotsNeeded(24);
+          buildByteDigitVertical(0, 7, getSecondsIndex());
+          buildByteDigitVertical(2, 5, getMinutesIndex());
+          buildByteDigitVertical(4, 1, getHoursIndex());
           for (int i = 0; i < 24; ++i) {
-            getBitDot(i).setColorPalette(&OrangeRed);
-            if (i < 8) {
-              if (i < 4) {
-                y = 0;
-                x = 7 - i;
-              } else {
-                y = 1;
-                x = 11 - i;
-              }
-            } else if (i < 16 && 8 <= i) {
-              getBitDot(i).setColorPalette(&WhiteGreen);
-              if (i < 12) {
-                y = 3;
-                x = 13 - i;
-              } else {
-                y = 4;
-                x = 17 - i;
-              }
-            } else if (16 <= i) {
-              getBitDot(i).setColorPalette(&WhiteBlue);
-              if (i < 20) {
-                y = 6;
-                x = 19 - i;
-              } else {
-                y = 7;
-                x = 23 - i;
-              }
-            }
-            getBitDot(i).setFixedLocation(x, y);
+            getBitDot(i).setColorPalette(&WhiteBlue);
           }
         }
-
         void updateTime(DateTime now) { // This desides what color to display the dot. 
-        // set the bits for the hours
-          int8_t temp1st = floor(now.hour() / 10);
-          int8_t temp2nd = now.hour() % 10;
-          setDigitToByte(temp1st, 3);
-          setDigitToByte(temp2nd, 7);
-        // Set the bits for the minutes
-          temp1st = floor(now.minute() / 10);
-          temp2nd = now.minute() % 10;
-          setDigitToByte(temp1st, 11);
-          setDigitToByte(temp2nd, 15);
-        // set the bits for the seconds
-          temp1st = floor(now.second() / 10);
-          temp2nd = now.second() % 10;
-          setDigitToByte(temp1st, 19);
-          setDigitToByte(temp2nd, 23);
+          displayTimeAlongDots(getSecondsIndex(), uint8_t(BYTE), now.second());
+          displayTimeAlongDots(getMinutesIndex(), uint8_t(BYTE), now.minute());
+          displayTimeAlongDots(getHoursIndex(), uint8_t(BYTE), now.hour());
         }
 
         uint8_t requestNumOfDots() {
-          return 24;
+          return getDotsNeeded();
         }
 
     private:
@@ -699,6 +660,7 @@ class CompleteClock{
 
         void begin() {
           Accelerometer.begin();
+          Accelerometer.measureModeOn();
           BitDotArr[0].begin();
           RTC.begin();
           createBackGrounds();
@@ -727,6 +689,7 @@ class CompleteClock{
         SixteenBitWhiteClock Clock16Bit;
         SixteenBitMultiColClock ColorClock16Bit;
         ThreeByteColorClock ThreeByteClock;
+        TestClock TestBoi;
         ControlBoard Controller;
         ADXL313 Accelerometer;
         bool GravityMode = false;
@@ -773,8 +736,8 @@ class CompleteClock{
               break;
 
             case 2:
-              ThreeByteClock.updateTime(RTC.now());
-              DotsInUse = ThreeByteClock.requestNumOfDots();
+              TestBoi.updateTime(RTC.now());
+              DotsInUse = TestBoi.requestNumOfDots();
               break;
           }
         }
@@ -793,7 +756,7 @@ class CompleteClock{
                   break;
                 case 2:
                   cleanSlate();
-                  ThreeByteClock.buildClock();
+                  TestBoi.buildClock();
                   break;
               }
               break;
@@ -809,7 +772,7 @@ class CompleteClock{
         void cleanSlate() {
           BitDotArr[0].CLEAN_ALL_LOCATIONS();
           for(int i = 0; i < BD_NUM; ++i) {
-            BitDotArr[i].setFixedLocation(-1, -1);
+            BitDotArr[i].hardReset();
           }
         }
 
