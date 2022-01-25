@@ -671,8 +671,8 @@ class CompleteClock{
         void runClock() {
           readInputs();
           manageController();
-          manageGravityMode(); 
           manageDisplayMode();
+          manageGravityMode(); 
           for (int i = 0; i < DotsInUse; ++i) {
             if (GravityMode) {
               BitDotArr[i].moveDot(x, y);
@@ -726,18 +726,18 @@ class CompleteClock{
         void manageDisplayMode() {
           switch(Controller.getMode()) {
             case 0:
-              Clock16Bit.updateTime(RTC.now());
               DotsInUse = Clock16Bit.requestNumOfDots();
+              Clock16Bit.updateTime(RTC.now());
               break;
             
             case 1:
-              ColorClock16Bit.updateTime(RTC.now());
               DotsInUse = ColorClock16Bit.requestNumOfDots();
+              ColorClock16Bit.updateTime(RTC.now());
               break;
 
             case 2:
-              TestBoi.updateTime(RTC.now());
-              DotsInUse = TestBoi.requestNumOfDots();
+              DotsInUse = ThreeByteClock.requestNumOfDots();
+              ThreeByteClock.updateTime(RTC.now());
               break;
           }
         }
@@ -756,7 +756,7 @@ class CompleteClock{
                   break;
                 case 2:
                   cleanSlate();
-                  TestBoi.buildClock();
+                  ThreeByteClock.buildClock();
                   break;
               }
               break;
