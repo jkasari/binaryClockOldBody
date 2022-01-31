@@ -470,11 +470,14 @@ class ClockDisplay {
         }
 
         void buildByteDigitVertical(int8_t xStart, int8_t yStart, uint8_t index) {
+          int8_t xTemp = xStart;
           for (int i = 0; i < uint8_t(BYTE); ++i) {
             if (i == uint8_t(FOUR_BIT)) {
-              yStart++;
+              yStart--;
+              xTemp = xStart;
             }
-            BitDotPointer[index + i].setFixedLocation((xStart + i) % uint8_t(FOUR_BIT), yStart);
+            BitDotPointer[index + i].setFixedLocation((xTemp), yStart);
+            xTemp++;
           }
         }
 
@@ -610,9 +613,9 @@ class ThreeByteColorClock:ClockDisplay{
           setHoursIndex(16);
           setDotsNeeded(24);
           buildByteDigitVertical(0, 7, getSecondsIndex());
-          buildByteDigitVertical(2, 5, getMinutesIndex());
+          buildByteDigitVertical(2, 4, getMinutesIndex());
           buildByteDigitVertical(4, 1, getHoursIndex());
-          for (int i = 0; i < 24; ++i) {
+          for (int i = 0; i < getDotsNeeded(); ++i) {
             getBitDot(i).setColorPalette(&WhiteBlue);
           }
         }
