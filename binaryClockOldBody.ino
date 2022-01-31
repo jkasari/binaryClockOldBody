@@ -425,7 +425,9 @@ class BitDots{
             void fadeIfNeeded() {
                 if (Fading) {
                   ColorIndex += FADE_RATE;
-                  if (ColorIndex == 128 || ColorIndex == 0) {
+                  if (ColorIndex == 0 && IsAZero) {
+                    Fading = false;
+                  } else if (ColorIndex == 128 && !IsAZero) {
                     Fading = false;
                   }
                 }
@@ -520,8 +522,8 @@ class TestClock:ClockDisplay{
       buildBitDigitHorizontal(1, 6, getSecondsIndex(), uint8_t(SIX_BIT));
       buildBitDigitHorizontal(3, 6, getMinutesIndex(), uint8_t(SIX_BIT));
       buildBitDigitHorizontal(6, 5, getHoursIndex(), uint8_t(FOUR_BIT));
-      for (int i = 0; i < 16; ++i) {
-        getBitDot(i).setColorPalette(&OrangeRed);
+      for (int i = 0; i < getDotsNeeded(); ++i) {
+        getBitDot(i).setColorPalette(&WhiteGreen);
       }
     }
 
@@ -552,7 +554,7 @@ class SixteenBitWhiteClock:ClockDisplay{
       buildBitDigitHorizontal(1, 6, getSecondsIndex(), uint8_t(SIX_BIT));
       buildBitDigitHorizontal(3, 6, getMinutesIndex(), uint8_t(SIX_BIT));
       buildBitDigitHorizontal(6, 5, getHoursIndex(), uint8_t(FOUR_BIT));
-      for (int i = 0; i < 16; ++i) {
+      for (int i = 0; i < getDotsNeeded(); ++i) {
         getBitDot(i).setColorPalette(&YellowWhite);
       }
     }
@@ -616,7 +618,7 @@ class ThreeByteColorClock:ClockDisplay{
           buildByteDigitVertical(2, 4, getMinutesIndex());
           buildByteDigitVertical(4, 1, getHoursIndex());
           for (int i = 0; i < getDotsNeeded(); ++i) {
-            getBitDot(i).setColorPalette(&OrangeRed);
+            getBitDot(i).setColorPalette(&WhiteGreen);
           }
         }
         void updateTime(DateTime now) { // This desides what color to display the dot. 
@@ -624,8 +626,7 @@ class ThreeByteColorClock:ClockDisplay{
           displayTimeAlongDots(getSecondsIndex() + FOUR_BIT, uint8_t(FOUR_BIT), now.second() / 10);
           displayTimeAlongDots(getMinutesIndex(), uint8_t(FOUR_BIT), now.minute() % 10);
           displayTimeAlongDots(getMinutesIndex() + FOUR_BIT, uint8_t(FOUR_BIT), now.minute() / 10);
-          displayTimeAlongDots(getHoursIndex(), uint8_t(BYTE), now.hour() % 10);
-          //displayTimeAlongDots(getHoursIndex(), uint8_t(BYTE), now.hour() % 10);
+          displayTimeAlongDots(getHoursIndex(), uint8_t(FOUR_BIT), now.hour() % 10);
           displayTimeAlongDots(getHoursIndex() + FOUR_BIT, uint8_t(FOUR_BIT), now.hour() / 10);
         }
 
@@ -633,20 +634,6 @@ class ThreeByteColorClock:ClockDisplay{
           return getDotsNeeded();
         }
 
-    private:
-
-        // Helper function that takes in the digit you want to make into a byte and how far in the bitdot array you want to store this byte.
-        void setDigitToByte(uint8_t digit, int8_t dotIndex) {
-          for (int i = 0; i < 4; ++i) {
-            int8_t adjustedIndex = dotIndex - i;
-            if (digit % 2 == 1) {
-              getBitDot(adjustedIndex).setToOne();
-            } else {
-              getBitDot(adjustedIndex).setToZero();
-            }
-            digit /= 2;
-          }
-        }
 };
 
 /**
