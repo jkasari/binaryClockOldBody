@@ -11,7 +11,7 @@
 #define BUTT_2 4 // Button 2
 #define BUTT_3 3 // Button 3
 #define MODE_LIM 3 // Limit of display modes.
-#define BACKG_NUM 5 // Number of backgrounds  
+#define BACKG_NUM 9 // Number of backgrounds  
 #define ACCEL_PORT 0x69 // Wire address of the accelerometer
 #define TIP_POINT 40000 // At what point the dots ball out of place.
 #define FADE_RATE 2 // Rate at which dots fade colors (has to be a multiple of 2)
@@ -793,11 +793,15 @@ class CompleteClock{
         }
 
         void createBackGrounds() {
-          BackGArr[0].createBackGround(CRGB(0,0,0));
-          BackGArr[1].createBackGround(CRGB(15, 25, 5));
-          BackGArr[2].createBackGround(CRGB(25, 15, 0));
-          BackGArr[3].createBackGround(CRGB(25, 0, 15));
-          BackGArr[4].createBackGround(CRGB(0, 15, 25));
+          BackGArr[0].createBackGround(CRGB(0, 0, 0));
+          BackGArr[1].createBackGround(CHSV(0, 255, 70));
+          BackGArr[2].createBackGround(CHSV(32, 255, 70));
+          BackGArr[3].createBackGround(CHSV(64, 255, 70));
+          BackGArr[4].createBackGround(CHSV(96, 255, 70));
+          BackGArr[5].createBackGround(CHSV(128, 255, 70));
+          BackGArr[6].createBackGround(CHSV(150, 255, 70));
+          BackGArr[7].createBackGround(CHSV(192, 255, 70));
+          BackGArr[8].createBackGround(CHSV(224, 255, 70));
         }
 };
 
