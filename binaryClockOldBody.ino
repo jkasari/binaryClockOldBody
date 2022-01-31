@@ -616,13 +616,17 @@ class ThreeByteColorClock:ClockDisplay{
           buildByteDigitVertical(2, 4, getMinutesIndex());
           buildByteDigitVertical(4, 1, getHoursIndex());
           for (int i = 0; i < getDotsNeeded(); ++i) {
-            getBitDot(i).setColorPalette(&WhiteBlue);
+            getBitDot(i).setColorPalette(&OrangeRed);
           }
         }
         void updateTime(DateTime now) { // This desides what color to display the dot. 
-          displayTimeAlongDots(getSecondsIndex(), uint8_t(BYTE), now.second());
-          displayTimeAlongDots(getMinutesIndex(), uint8_t(BYTE), now.minute());
-          displayTimeAlongDots(getHoursIndex(), uint8_t(BYTE), now.hour());
+          displayTimeAlongDots(getSecondsIndex(), uint8_t(FOUR_BIT), now.second() % 10);
+          displayTimeAlongDots(getSecondsIndex() + FOUR_BIT, uint8_t(FOUR_BIT), now.second() / 10);
+          displayTimeAlongDots(getMinutesIndex(), uint8_t(FOUR_BIT), now.minute() % 10);
+          displayTimeAlongDots(getMinutesIndex() + FOUR_BIT, uint8_t(FOUR_BIT), now.minute() / 10);
+          displayTimeAlongDots(getHoursIndex(), uint8_t(BYTE), now.hour() % 10);
+          //displayTimeAlongDots(getHoursIndex(), uint8_t(BYTE), now.hour() % 10);
+          displayTimeAlongDots(getHoursIndex() + FOUR_BIT, uint8_t(FOUR_BIT), now.hour() / 10);
         }
 
         uint8_t requestNumOfDots() {
