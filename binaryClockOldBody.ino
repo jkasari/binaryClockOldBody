@@ -768,7 +768,7 @@ class CompleteClock{
           }
         }
 
-        void cleanSlate(TProgmemRGBGradientPalettePtr palPoint) {
+        void cleanSlate(&TProgmemRGBGradientPalette_byte palPoint) {
           BitDotArr[0].CLEAN_ALL_LOCATIONS();
           for(int i = 0; i < BD_NUM; ++i) {
             BitDotArr[i].hardReset();
