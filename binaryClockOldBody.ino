@@ -109,17 +109,26 @@ class Button{
         Button(uint8_t port) {
             Port = port;
         }
+
+        bool isPressed() {
+          if (digitalRead(Port) == LOW) {
+            Count++;
+            return true;
+          } else {
+            return false;
+          }
+        }
+
+        void clearCount() {
+          Count = 0;
+        }
         
-        uint32_t check() {
-            uint32_t count = 0;
-            while(digitalRead(Port) == LOW) {
-                count++;
-                delay(1);
-            }
-            return count;
+        uint32_t getCount() {
+            return Count;
         }
 
     private:
+        uint32_t Count = 0; 
         uint8_t Port = 0;
 };
 
@@ -152,14 +161,16 @@ class ControlBoard{
         }
         
         Action buttonCheck() { // Returns true if it's time to go into time adjust mode
-            uint32_t count = MainButt.check();
-            if (count > 1) {
-                if (HalfSecond > count) {Mode++; modeLimitCheck(); return Action::ModeChange;}
-                if (count > HalfSecond && MultiSecond > count) {Mode--; modeLimitCheck(); return Action::ModeChange;}
-                if (count > MultiSecond) {adjustMode = !adjustMode;}
+            if (!MainButt.isPressed() && MainButt.getCount() > 1) {
+              uint32_t count = MainButt.getCount();
+              MainButt.clearCount();
+              if (HalfSecond > count) {Mode++; modeLimitCheck(); return Action::ModeChange;}
+              if (count > HalfSecond && MultiSecond > count) {Mode--; modeLimitCheck(); return Action::ModeChange;}
+              if (count > MultiSecond) {adjustMode = !adjustMode;}
             }
-            count = HourButt.check();
-            if (count > 1) {
+            if (!HourButt.isPressed() && HourButt.getCount() > 1) {
+              uint32_t count = HourButt.getCount();
+              HourButt.clearCount();
               if (HalfSecond > count) {BGIndex++; BGLimitCheck(); return Action::BGChange;}
               if (count > HalfSecond && MultiSecond > count) {BGIndex--; BGLimitCheck(); return Action::BGChange;}
             }
@@ -170,23 +181,23 @@ class ControlBoard{
             }
         }
 
-        int8_t getHourUpdate() {
-            uint32_t count = HourButt.check();
-            if (count > 1) {
-                if (HalfSecond > count) {return 1;}
-                if (count > HalfSecond) {return -1;}
-            }
-            return 0;
-        }
+        //int8_t getHourUpdate() {
+        //    uint32_t count = HourButt.check();
+        //    if (count > 1) {
+        //        if (HalfSecond > count) {return 1;}
+        //        if (count > HalfSecond) {return -1;}
+        //    }
+        //    return 0;
+        //}
 
-        int8_t getMinuteUpdate() {
-            uint32_t count = MinButt.check();
-            if (count > 1) {
-                if (HalfSecond > count) {return 1;}
-                if (count > HalfSecond) {return -1;}
-            }
-            return 0;
-        }
+        //int8_t getMinuteUpdate() {
+        //    uint32_t count = MinButt.check();
+        //    if (count > 1) {
+        //        if (HalfSecond > count) {return 1;}
+        //        if (count > HalfSecond) {return -1;}
+        //    }
+        //    return 0;
+        //}
 
         int8_t getPRReading() {
           return PR_Reader.getValue();
@@ -660,7 +671,7 @@ class CompleteClock{
           BitDotArr[0].begin();
           RTC.begin();
           createBackGrounds();
-          MasterPal = MAP_ORGRED;
+          MasterPal = MAP_YLWWHITE;
           ClockDisplay::BitDotPointer = BitDotArr;
           ClockDisplay::PalettePointer = MasterPal;
           Clock16Bit.buildClock();
@@ -746,15 +757,15 @@ class CompleteClock{
             case Action::ModeChange:
               switch (Controller.getMode()) {
                 case 0:
-                  cleanSlate(MAP_WHITEGREEN);
+                  cleanSlate(MAP_YLWWHITE);
                   Clock16Bit.buildClock();
                   break;
                 case 1:
-                  cleanSlate(MAP_FIRE);
+                  cleanSlate(Rainbow_gp);
                   ColorClock16Bit.buildClock();
                   break;
                 case 2:
-                  cleanSlate(MAP_YLWWHITE);
+                  cleanSlate(Rainbow_gp);
                   ThreeByteClock.buildClock();
                   break;
               }
@@ -768,7 +779,11 @@ class CompleteClock{
           }
         }
 
-        void cleanSlate(&TProgmemRGBGradientPalette_byte palPoint) {
+        void beginDisplay() {
+          
+        }
+
+        void cleanSlate(TProgmemRGBGradientPalettePtr palPoint) {
           BitDotArr[0].CLEAN_ALL_LOCATIONS();
           for(int i = 0; i < BD_NUM; ++i) {
             BitDotArr[i].hardReset();
