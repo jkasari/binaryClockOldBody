@@ -11,12 +11,12 @@
 #define BUTT_2 4 // Button 2
 #define BUTT_3 3 // Button 3
 #define MODE_LIM 3 // Limit of display modes.
-#define BACKG_NUM 5 // Number of backgrounds  
+#define BACKG_NUM 9 // Number of backgrounds  
 #define ACCEL_PORT 0x69 // Wire address of the accelerometer
 #define TIP_POINT 40000 // At what point the dots ball out of place.
 #define FADE_RATE 2 // Rate at which dots fade colors (has to be a multiple of 2)
 #define RESET 500 // Time before the clock resest the dots
-#define DOT_MOVE 700 // The resistence for dot movment
+#define DOT_MOVE 900 // The resistence for dot movment
 #define B_HIGH 200 // Brightness high limit
 #define B_LOW 2 // Brightness low limit
 #define BLANK CRGB(0,0,0) // A blank CRGB object.
@@ -30,28 +30,24 @@ DEFINE_GRADIENT_PALETTE(MAP_WHITEBLUE) {
     128, 0, 100, 155,
     255, 0, 0, 230
 };
-CRGBPalette16 WhiteBlue = MAP_WHITEBLUE;
 
 DEFINE_GRADIENT_PALETTE(MAP_WHITEGREEN) {
     0, 0, 230, 0,
     128, 75, 150, 25,
     255, 0, 230, 0,
 };
-CRGBPalette16 WhiteGreen = MAP_WHITEGREEN;
 
 DEFINE_GRADIENT_PALETTE(MAP_ORGRED) {
     0, 230, 0, 0,
     128, 150, 100, 0,
     255, 230, 0, 0
 };
-CRGBPalette16 OrangeRed = MAP_ORGRED;
 
 DEFINE_GRADIENT_PALETTE(MAP_YLWWHITE) {
     0, 75, 75, 75,
     128, 150, 100, 0,
     255, 75, 75, 75
 };
-CRGBPalette16 YellowWhite = MAP_YLWWHITE;
 
 DEFINE_GRADIENT_PALETTE(MAP_FIRE) {
     0, 100, 0, 0,
@@ -64,7 +60,8 @@ DEFINE_GRADIENT_PALETTE(MAP_FIRE) {
     255, 70, 10, 0
 
 };
-CRGBPalette16 FireBackGround = MAP_FIRE;
+
+
 
 
 
@@ -465,6 +462,10 @@ class ClockDisplay {
           return BitDotPointer[index];
         }
 
+        CRGBPalette16& getPalette() {
+          return PalettePointer;
+        }
+
         void buildBitDigitHorizontal(int8_t xStart, int8_t yStart, uint8_t index, uint8_t length) {
           for (int i = 0; i < length; ++i) {
             BitDotPointer[index + i].setFixedLocation(xStart, yStart - i);
@@ -505,6 +506,7 @@ class ClockDisplay {
 
     private:
       inline static BitDots* BitDotPointer;
+      inline static CRGBPalette16 PalettePointer;
       uint8_t SecondsIndex;
       uint8_t MinutesIndex;
       uint8_t HoursIndex;
@@ -523,7 +525,7 @@ class TestClock:ClockDisplay{
       buildBitDigitHorizontal(3, 6, getMinutesIndex(), uint8_t(SIX_BIT));
       buildBitDigitHorizontal(6, 5, getHoursIndex(), uint8_t(FOUR_BIT));
       for (int i = 0; i < getDotsNeeded(); ++i) {
-        getBitDot(i).setColorPalette(&WhiteGreen);
+        getBitDot(i).setColorPalette(&getPalette());
       }
     }
 
@@ -555,7 +557,7 @@ class SixteenBitWhiteClock:ClockDisplay{
       buildBitDigitHorizontal(3, 6, getMinutesIndex(), uint8_t(SIX_BIT));
       buildBitDigitHorizontal(6, 5, getHoursIndex(), uint8_t(FOUR_BIT));
       for (int i = 0; i < getDotsNeeded(); ++i) {
-        getBitDot(i).setColorPalette(&YellowWhite);
+        getBitDot(i).setColorPalette(&getPalette());
       }
     }
 
@@ -586,7 +588,7 @@ class SixteenBitMultiColClock:ClockDisplay{
       buildBitDigitHorizontal(3, 6, getMinutesIndex(), uint8_t(SIX_BIT));
       buildBitDigitHorizontal(6, 5, getHoursIndex(), uint8_t(FOUR_BIT));
       for (int i = 0; i < 16; ++i) {
-        getBitDot(i).setColorPalette(&WhiteBlue);
+        getBitDot(i).setColorPalette(&getPalette());
       }
     }
 
@@ -618,7 +620,7 @@ class ThreeByteColorClock:ClockDisplay{
           buildByteDigitVertical(2, 4, getMinutesIndex());
           buildByteDigitVertical(4, 1, getHoursIndex());
           for (int i = 0; i < getDotsNeeded(); ++i) {
-            getBitDot(i).setColorPalette(&WhiteGreen);
+            getBitDot(i).setColorPalette(&getPalette());
           }
         }
         void updateTime(DateTime now) { // This desides what color to display the dot. 
@@ -658,7 +660,9 @@ class CompleteClock{
           BitDotArr[0].begin();
           RTC.begin();
           createBackGrounds();
+          MasterPal = MAP_ORGRED;
           ClockDisplay::BitDotPointer = BitDotArr;
+          ClockDisplay::PalettePointer = MasterPal;
           Clock16Bit.buildClock();
         }
 
@@ -686,6 +690,7 @@ class CompleteClock{
         TestClock TestBoi;
         ControlBoard Controller;
         ADXL313 Accelerometer;
+        CRGBPalette16 MasterPal;
         bool GravityMode = false;
         int16_t x;
         int16_t y;
@@ -741,15 +746,15 @@ class CompleteClock{
             case Action::ModeChange:
               switch (Controller.getMode()) {
                 case 0:
-                  cleanSlate();
+                  cleanSlate(MAP_WHITEGREEN);
                   Clock16Bit.buildClock();
                   break;
                 case 1:
-                  cleanSlate();
+                  cleanSlate(MAP_FIRE);
                   ColorClock16Bit.buildClock();
                   break;
                 case 2:
-                  cleanSlate();
+                  cleanSlate(MAP_YLWWHITE);
                   ThreeByteClock.buildClock();
                   break;
               }
@@ -763,11 +768,13 @@ class CompleteClock{
           }
         }
 
-        void cleanSlate() {
+        void cleanSlate(&TProgmemRGBGradientPalette_byte palPoint) {
           BitDotArr[0].CLEAN_ALL_LOCATIONS();
           for(int i = 0; i < BD_NUM; ++i) {
             BitDotArr[i].hardReset();
           }
+          MasterPal = palPoint;
+          ClockDisplay::PalettePointer = MasterPal;
         }
 
         bool isAClock() {
@@ -793,11 +800,15 @@ class CompleteClock{
         }
 
         void createBackGrounds() {
-          BackGArr[0].createBackGround(CRGB(0,0,0));
-          BackGArr[1].createBackGround(CRGB(15, 25, 5));
-          BackGArr[2].createBackGround(CRGB(25, 15, 0));
-          BackGArr[3].createBackGround(CRGB(25, 0, 15));
-          BackGArr[4].createBackGround(CRGB(0, 15, 25));
+          BackGArr[0].createBackGround(CRGB(0, 0, 0));
+          BackGArr[1].createBackGround(CHSV(0, 255, 70));
+          BackGArr[2].createBackGround(CHSV(32, 255, 70));
+          BackGArr[3].createBackGround(CHSV(64, 255, 70));
+          BackGArr[4].createBackGround(CHSV(96, 255, 70));
+          BackGArr[5].createBackGround(CHSV(128, 255, 70));
+          BackGArr[6].createBackGround(CHSV(150, 255, 70));
+          BackGArr[7].createBackGround(CHSV(192, 255, 70));
+          BackGArr[8].createBackGround(CHSV(224, 255, 70));
         }
 };
 
