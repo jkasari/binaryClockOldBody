@@ -11,7 +11,7 @@
 #define BUTT_2 4 // Button 2
 #define BUTT_3 3 // Button 3
 #define MODE_LIM 3 // Limit of display modes.
-#define BACKG_NUM 9 // Number of backgrounds  
+#define BACKG_NUM 255 // Number of backgrounds  
 #define ACCEL_PORT 0x69 // Wire address of the accelerometer
 #define TIP_POINT 40000 // At what point the dots ball out of place.
 #define FADE_RATE 2 // Rate at which dots fade colors (has to be a multiple of 2)
@@ -24,6 +24,9 @@
 #define FOUR_BIT 4 // Literally the number 4
 #define BYTE 8 // Literally the number 8
 #define DIS_NUM 2 // The number of displays
+#define BG_BRIGHT 100 // Background brightness
+#define BG_CHANGE 20 // How far the background jumps in the background palette
+#define BG_SPEED 50 // The rate at which you can move through backgrounds
 
 
 DEFINE_GRADIENT_PALETTE(MAP_WHITEBLUE) {
@@ -172,9 +175,13 @@ class ControlBoard{
             if (!HourButt.isPressed() && HourButt.getCount() > 1) {
               uint32_t count = HourButt.getCount();
               HourButt.clearCount();
-              if (HalfSecond > count) {BGIndex++; BGLimitCheck(); return Action::BGChange;}
-              if (count > HalfSecond && MultiSecond > count) {BGIndex--; BGLimitCheck(); return Action::BGChange;}
+              if (HalfSecond > count) {BGIndex += BG_CHANGE; return Action::BGChange;}
+              if (count > HalfSecond && MultiSecond > count) {BGIndex--; return Action::BGChange;}
+            } else if (HourButt.isPressed()) {
+              uint32_t count = HourButt.getCount();
+              if (count > HalfSecond) { EVERY_N_MILLIS(BG_SPEED) { BGIndex++; } }; 
             }
+
             if (adjustMode) {
               return Action::TimeAdjust;
             } else {
@@ -213,7 +220,7 @@ class ControlBoard{
         const uint16_t HalfSecond = 500;
         const uint16_t MultiSecond = 5000;
         int8_t Mode = 0;
-        int8_t BGIndex = 0;
+        uint8_t BGIndex = 0;
         bool adjustMode = false;
         void modeLimitCheck() {
             if (Mode >= MODE_LIM) {
@@ -224,54 +231,6 @@ class ControlBoard{
             }
         }
 
-        void BGLimitCheck() {
-            if (BGIndex >= BACKG_NUM) {
-                BGIndex = 0;
-            } 
-            if (0 > BGIndex) {
-                BGIndex = BACKG_NUM - 1;
-            }
-        }
-
-};
-
-/**
- * The idea with this class was that it would be called in a loop and give you a different color in
- * out of a palette each time it was called.
- * It has a palette point and an indexing data member.
- * You can also create a background with a solid color and it will just return the same color each time
- * it is called. 
- * 
- */
-class BackGround{
-  public:
-      // Doesn't work
-      void createBackGround(CRGBPalette16 *palPoint, uint8_t rate) {
-        ColorPalette = palPoint;
-        Rate = rate;
-      }
-
-      void createBackGround(CRGB color) {
-        SolidColor = color;
-      }
-
-      CRGB getColor() {
-        if (Rate > 0) {
-          EVERY_N_MILLISECONDS(Rate) {
-            Increment++;
-            if (Increment % Rate == 0) {
-              return ColorFromPalette(*ColorPalette, Increment);
-            }
-          }
-        }
-        return SolidColor;
-      }
-
-  private:
-      uint8_t Increment; 
-      uint8_t Rate = 0;
-      CRGBPalette16 *ColorPalette;
-      CRGB SolidColor = BLANK;
 };
 
 /**
@@ -297,7 +256,7 @@ class BitDots{
           FastLED.clear();
         }
 
-        void DISPLAY_BACKGROUND(BackGround &BackG) {
+        void DISPLAY_BACKGROUND(CRGB &BackG) {
           for (int i = 0; i < 8; ++i) {
             for (int j = 0; j < 8; ++j) {
               if (!Locations[i][j]) {
@@ -442,8 +401,8 @@ class BitDots{
                 }
             }
 
-          void displayBackground(int8_t location, BackGround &BGColor) {
-            FLEDS[location] = BGColor.getColor();
+          void displayBackground(int8_t location, CRGB &BGColor) {
+            FLEDS[location] = BGColor;
             //FLEDS[location] = ColorFromPalette(FireBackGround, location * 10);
           }
 
@@ -525,40 +484,13 @@ class ClockDisplay {
       uint8_t DotsNeeded;
 };
 
-
-class TestClock:ClockDisplay{
-  public:
-    void buildClock() {
-      setSecondsIndex(0);
-      setMinutesIndex(6);
-      setHoursIndex(12);
-      setDotsNeeded(16);
-      buildBitDigitHorizontal(1, 6, getSecondsIndex(), uint8_t(SIX_BIT));
-      buildBitDigitHorizontal(3, 6, getMinutesIndex(), uint8_t(SIX_BIT));
-      buildBitDigitHorizontal(6, 5, getHoursIndex(), uint8_t(FOUR_BIT));
-      for (int i = 0; i < getDotsNeeded(); ++i) {
-        getBitDot(i).setColorPalette(&getPalette());
-      }
-    }
-
-    void updateTime(DateTime now) {
-      displayTimeAlongDots(getSecondsIndex(), uint8_t(SIX_BIT), now.second());
-      displayTimeAlongDots(getMinutesIndex(), uint8_t(SIX_BIT), now.minute());
-      displayTimeAlongDots(getHoursIndex(), uint8_t(FOUR_BIT), now.hour() % 12);
-    }
-
-    uint8_t requestNumOfDots() {
-      return getDotsNeeded();
-    }
-};
-
 /**
  * This displays time horizontally in 16 bits.
  * two 6 bit arrays handle hours and minutes with the remaining 4 showng hours.
  * It displays white for 0 and yellow for 1. 
  * 
  */
-class SixteenBitWhiteClock:public ClockDisplay{
+class SixteenBitClock:public ClockDisplay{
   public:
     void buildClock() {
       setSecondsIndex(0);
@@ -569,37 +501,6 @@ class SixteenBitWhiteClock:public ClockDisplay{
       buildBitDigitHorizontal(3, 6, getMinutesIndex(), uint8_t(SIX_BIT));
       buildBitDigitHorizontal(6, 5, getHoursIndex(), uint8_t(FOUR_BIT));
       for (int i = 0; i < getDotsNeeded(); ++i) {
-        getBitDot(i).setColorPalette(&getPalette());
-      }
-    }
-
-    void updateTime(DateTime now) {
-      displayTimeAlongDots(getSecondsIndex(), uint8_t(SIX_BIT), now.second());
-      displayTimeAlongDots(getMinutesIndex(), uint8_t(SIX_BIT), now.minute());
-      displayTimeAlongDots(getHoursIndex(), uint8_t(FOUR_BIT), now.hour() % 12);
-    }
-
-    uint8_t requestNumOfDots() {
-      return getDotsNeeded();
-    }
-};
-
-/**
- * Same as the other 16 bit display only this time the hours minutes and seconds each get
- * their own unique color. 
- * 
- */
-class SixteenBitMultiColClock:ClockDisplay{
-  public:
-    void buildClock() {
-      setSecondsIndex(0);
-      setMinutesIndex(6);
-      setHoursIndex(12);
-      setDotsNeeded(16);
-      buildBitDigitHorizontal(1, 6, getSecondsIndex(), uint8_t(SIX_BIT));
-      buildBitDigitHorizontal(3, 6, getMinutesIndex(), uint8_t(SIX_BIT));
-      buildBitDigitHorizontal(6, 5, getHoursIndex(), uint8_t(FOUR_BIT));
-      for (int i = 0; i < 16; ++i) {
         getBitDot(i).setColorPalette(&getPalette());
       }
     }
@@ -620,7 +521,7 @@ class SixteenBitMultiColClock:ClockDisplay{
  * 
  */
 
-class ThreeByteColorClock:public ClockDisplay{
+class ThreeByteClock:public ClockDisplay{
   public:
   // Sets all the fixed x y values and sets the colors for the 3 byte clock.
         void buildClock() {
@@ -671,9 +572,10 @@ class CompleteClock{
           Accelerometer.measureModeOn();
           BitDotArr[0].begin();
           RTC.begin();
-          createBackGrounds();
-          ClockDisplays[0] = new SixteenBitWhiteClock;
-          ClockDisplays[1] = new ThreeByteColorClock;
+          ThreeByteClock ByteClock;
+          SixteenBitClock BitClock;
+          ClockDisplays[0] = &ByteClock;
+          ClockDisplays[1] = &BitClock;
           MasterPal = MAP_YLWWHITE;
           ClockDisplay::BitDotPointer = BitDotArr;
           ClockDisplay::PalettePointer = MasterPal;
@@ -699,10 +601,10 @@ class CompleteClock{
         BitDots BitDotArr[BD_NUM];
         RTC_DS1307 RTC;
         ClockDisplay* ClockDisplays[DIS_NUM];
-        TestClock TestBoi;
         ControlBoard Controller;
         ADXL313 Accelerometer;
         CRGBPalette16 MasterPal;
+        CRGBPalette16 BackGroundPal = Rainbow_gp;
         bool GravityMode = false;
         int16_t x;
         int16_t y;
@@ -710,7 +612,7 @@ class CompleteClock{
         uint16_t tippingPoint = TIP_POINT;
         uint32_t GravityModeTimer = 0;
         uint32_t TimeLimit = RESET;
-        BackGround BackGArr[BACKG_NUM];
+        
 
         void readInputs() {
           if(Accelerometer.dataReady()) {
@@ -756,10 +658,6 @@ class CompleteClock{
           }
         }
 
-        void beginDisplay() {
-          
-        }
-
         void cleanSlate(TProgmemRGBGradientPalettePtr palPoint) {
           BitDotArr[0].CLEAN_ALL_LOCATIONS();
           for(int i = 0; i < BD_NUM; ++i) {
@@ -786,22 +684,12 @@ class CompleteClock{
         }
 
         void refreshDots() {
-          BitDotArr[0].DISPLAY_BACKGROUND(BackGArr[Controller.getBGIndex()]);
+          CRGB temp = ColorFromPalette(BackGroundPal, Controller.getBGIndex(), BG_BRIGHT);
+          BitDotArr[0].DISPLAY_BACKGROUND(temp);
           BitDotArr[0].SHOW_ALL_DOTS();
           BitDotArr[0].CLEAR_ALL_DOTS();
         }
 
-        void createBackGrounds() {
-          BackGArr[0].createBackGround(CRGB(0, 0, 0));
-          BackGArr[1].createBackGround(CHSV(0, 255, 70));
-          BackGArr[2].createBackGround(CHSV(32, 255, 70));
-          BackGArr[3].createBackGround(CHSV(64, 255, 70));
-          BackGArr[4].createBackGround(CHSV(96, 255, 70));
-          BackGArr[5].createBackGround(CHSV(128, 255, 70));
-          BackGArr[6].createBackGround(CHSV(150, 255, 70));
-          BackGArr[7].createBackGround(CHSV(192, 255, 70));
-          BackGArr[8].createBackGround(CHSV(224, 255, 70));
-        }
 };
 
 
