@@ -23,6 +23,7 @@
 #define SIX_BIT 6 // Literally the number six.
 #define FOUR_BIT 4 // Literally the number 4
 #define BYTE 8 // Literally the number 8
+#define DIS_NUM 2 // The number of displays
 
 
 DEFINE_GRADIENT_PALETTE(MAP_WHITEBLUE) {
@@ -557,7 +558,7 @@ class TestClock:ClockDisplay{
  * It displays white for 0 and yellow for 1. 
  * 
  */
-class SixteenBitWhiteClock:ClockDisplay{
+class SixteenBitWhiteClock:public ClockDisplay{
   public:
     void buildClock() {
       setSecondsIndex(0);
@@ -619,7 +620,7 @@ class SixteenBitMultiColClock:ClockDisplay{
  * 
  */
 
-class ThreeByteColorClock:ClockDisplay{
+class ThreeByteColorClock:public ClockDisplay{
   public:
   // Sets all the fixed x y values and sets the colors for the 3 byte clock.
         void buildClock() {
@@ -671,10 +672,12 @@ class CompleteClock{
           BitDotArr[0].begin();
           RTC.begin();
           createBackGrounds();
+          ClockDisplays[0] = new SixteenBitWhiteClock;
+          ClockDisplays[1] = new ThreeByteColorClock;
           MasterPal = MAP_YLWWHITE;
           ClockDisplay::BitDotPointer = BitDotArr;
           ClockDisplay::PalettePointer = MasterPal;
-          Clock16Bit.buildClock();
+          ClockDisplays[0]->buildClock();
         }
 
         void runClock() {
@@ -695,9 +698,7 @@ class CompleteClock{
     private:
         BitDots BitDotArr[BD_NUM];
         RTC_DS1307 RTC;
-        SixteenBitWhiteClock Clock16Bit;
-        SixteenBitMultiColClock ColorClock16Bit;
-        ThreeByteColorClock ThreeByteClock;
+        ClockDisplay* ClockDisplays[DIS_NUM];
         TestClock TestBoi;
         ControlBoard Controller;
         ADXL313 Accelerometer;
@@ -734,41 +735,17 @@ class CompleteClock{
         }
 
         void manageDisplayMode() {
-          switch(Controller.getMode()) {
-            case 0:
-              DotsInUse = Clock16Bit.requestNumOfDots();
-              Clock16Bit.updateTime(RTC.now());
-              break;
-            
-            case 1:
-              DotsInUse = ColorClock16Bit.requestNumOfDots();
-              ColorClock16Bit.updateTime(RTC.now());
-              break;
-
-            case 2:
-              DotsInUse = ThreeByteClock.requestNumOfDots();
-              ThreeByteClock.updateTime(RTC.now());
-              break;
-          }
+          uint8_t mode = Controller.getMode();
+          DotsInUse = ClockDisplays[mode]->requestNumOfDots();
+          ClockDisplays[mode]->updateTime(RTC.now());
         }
 
         void manageController() {
           switch (Controller.buttonCheck()) {
             case Action::ModeChange:
-              switch (Controller.getMode()) {
-                case 0:
-                  cleanSlate(MAP_YLWWHITE);
-                  Clock16Bit.buildClock();
-                  break;
-                case 1:
-                  cleanSlate(Rainbow_gp);
-                  ColorClock16Bit.buildClock();
-                  break;
-                case 2:
-                  cleanSlate(Rainbow_gp);
-                  ThreeByteClock.buildClock();
-                  break;
-              }
+              uint8_t mode = Controller.getMode();
+              cleanSlate(MAP_YLWWHITE);
+              ClockDisplays[mode]->buildClock();
               break;
             
             case Action::TimeAdjust:
