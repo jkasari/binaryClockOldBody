@@ -26,6 +26,7 @@
 #define BG_BRIGHT 100 // Background brightness
 #define BG_CHANGE 20 // How far the background jumps in the background palette
 #define BG_SPEED 50 // The rate at which you can move through backgrounds
+#define PAL_NUM 7 // The number of palettes.
 
 
 DEFINE_GRADIENT_PALETTE(MAP_WHITEBLUE) {
@@ -64,7 +65,23 @@ DEFINE_GRADIENT_PALETTE(MAP_FIRE) {
 
 };
 
+DEFINE_GRADIENT_PALETTE(MAP_BLUEGREENWHT) {
+  0, 20, 20, 200,
+  64, 0, 230, 0,
+  128, 75, 75, 75,
+  196, 0, 230, 0,
+  255, 20, 20, 200
+};
 
+const TProgmemRGBGradientPalette_byte* PaletteArr[] = {
+MAP_YLWWHITE,
+MAP_WHITEGREEN,
+MAP_ORGRED,
+MAP_WHITEBLUE,
+MAP_FIRE,
+Rainbow_gp,
+MAP_BLUEGREENWHT
+};
 
 
 
@@ -98,6 +115,12 @@ class PhotoResistorSmoother{
       int32_t value = 0;
       int32_t highRead = 1023;
       int32_t lowRead = 0;
+};
+
+
+class PaletteMaster {
+  public:
+  private:
 };
 
 //
@@ -153,6 +176,7 @@ class Button{
     public:
         Button(uint8_t port) {
             Port = port;
+            pinMode(Port, INPUT_PULLUP);
         }
 
         bool isPressed() {
@@ -177,7 +201,7 @@ class Button{
         uint8_t Port = 0;
 };
 
-enum class Action{ ModeChange, TimeAdjust, DoNothing, BGChange};
+enum class Action{ ModeChange, TimeAdjust, DoNothing, PaletteChange};
 
 /**
 * The control board has control over all the external controls on the clock.
@@ -202,28 +226,56 @@ class ControlBoard{
         int8_t getBGIndex() {
             return BGIndex;
         }
+
+        int8_t getPalIndex() {
+          return PalIndex;
+        }
         
         Action buttonCheck() { // Returns true if it's time to go into time adjust mode
-            if (!MainButt.isPressed() && MainButt.getCount() > 1) {
-              uint32_t count = MainButt.getCount();
-              MainButt.clearCount();
-              if (MultiSecond > count) {Mode++; modeLimitCheck(); return Action::ModeChange;}
-              if (count > MultiSecond) {adjustMode = !adjustMode;}
+            int8_t tempMode = Mode;
+            int8_t tempPal = PalIndex;
+            mainButtCheck();
+            hourButtCheck();
+            minuteButtCheck();
+            if (tempMode != Mode) {
+              return Action::ModeChange;
             }
-            if (!HourButt.isPressed() && HourButt.getCount() > 1) {
-              uint32_t count = HourButt.getCount();
-              HourButt.clearCount();
-              if (HalfSecond > count) {BGIndex += BG_CHANGE; return Action::BGChange;}
-            } else if (HourButt.isPressed()) {
-              uint32_t count = HourButt.getCount();
-              if (count > HalfSecond) { EVERY_N_MILLIS(BG_SPEED) { BGIndex++; } }; 
+            if (tempPal != PalIndex) {
+              return Action::ModeChange;
             }
-
             if (adjustMode) {
               return Action::TimeAdjust;
             } else {
               return Action::DoNothing;
             }
+        }
+
+        void mainButtCheck() {
+            if (!MainButt.isPressed() && MainButt.getCount() > 1) {
+              uint32_t count = MainButt.getCount();
+              MainButt.clearCount();
+              if (MultiSecond > count) {Mode++; modeLimitCheck();}
+              if (count > MultiSecond) {adjustMode = !adjustMode;}
+            }
+        }
+
+        void hourButtCheck() {
+            if (!HourButt.isPressed() && HourButt.getCount() > 1) {
+              uint32_t count = HourButt.getCount();
+              HourButt.clearCount();
+              if (HalfSecond > count) {BGIndex += BG_CHANGE;}
+            } else if (HourButt.isPressed()) {
+              uint32_t count = HourButt.getCount();
+              if (count > HalfSecond) { EVERY_N_MILLIS(BG_SPEED) { BGIndex++; } }
+            }
+        }
+
+        void minuteButtCheck() {
+          if (!MinButt.isPressed() && MinButt.getCount() > 1) {
+            uint32_t count = MinButt.getCount();
+            MinButt.clearCount();
+            if (HalfSecond > count) {PalIndex ++; palLimitCheck();}
+          }
         }
 
         //int8_t getHourUpdate() {
@@ -258,6 +310,7 @@ class ControlBoard{
         const uint16_t MultiSecond = 5000;
         int8_t Mode = 0;
         uint8_t BGIndex = 0;
+        int8_t PalIndex = 0;
         bool adjustMode = false;
         void modeLimitCheck() {
             if (Mode >= MODE_LIM) {
@@ -266,6 +319,15 @@ class ControlBoard{
             if (0 > Mode) {
                 Mode = MODE_LIM - 1;
             }
+        }
+
+        void palLimitCheck() {
+          if (PalIndex >= PAL_NUM) {
+            PalIndex = 0;
+          }
+          if (0 > PalIndex) {
+            PalIndex = PAL_NUM - 1;
+          }
         }
 
 };
@@ -644,6 +706,7 @@ class CompleteClock{
         bool GravityMode = false;
         int16_t x;
         int16_t y;
+        int16_t z;
         uint8_t DotsInUse = BD_NUM;
         uint16_t tippingPoint = TIP_POINT;
         uint32_t GravityModeTimer = 0;
@@ -654,11 +717,12 @@ class CompleteClock{
           Accelerometer.updateReadings();
           x = Accelerometer.X();
           y = Accelerometer.Y() * -1;
+          z = Accelerometer.Z();
           BitDotArr[0].ALL_DOT_BRIGHTNESS(Controller.getPRReading());
         }
 
         void manageGravityMode() {
-          if (pow(y, 2) > tippingPoint) {
+          if (pow(y, 2) > tippingPoint || pow(z, 2) > tippingPoint) {
             GravityMode = true;
             GravityModeTimer = 1;
           } else {
@@ -680,7 +744,7 @@ class CompleteClock{
           switch (Controller.buttonCheck()) {
             case Action::ModeChange:
               int8_t mode = Controller.getMode();
-              cleanSlate(MAP_YLWWHITE);
+              cleanSlate(PaletteArr[Controller.getPalIndex()]);
               ClockDisplays[mode]->buildClock();
               break;
             
@@ -730,9 +794,6 @@ class CompleteClock{
 CompleteClock TheClock(BUTT_1, BUTT_2, BUTT_3, PR);
 
 void setup() {
-    pinMode(BUTT_1, INPUT_PULLUP);
-    pinMode(BUTT_2, INPUT_PULLUP);
-    pinMode(BUTT_3, INPUT_PULLUP);
     Wire.begin();
     TheClock.begin();
     Serial.begin(115200);
