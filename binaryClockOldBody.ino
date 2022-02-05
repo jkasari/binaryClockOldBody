@@ -1,19 +1,18 @@
 #include <FastLED.h>
 #include "RTClib.h"
 #include <Wire.h>
-#include <SparkFunADXL313.h>
 
 #define LED_PIN 6 // Pin for the led matrix data output
 #define LED_NUM 64 // Number of leds in the matrix
 #define BD_NUM 24 // Number of total bit dots needed for all displays.
 #define PR A0 // Photoresitor data in
-#define BUTT_1 5 // Button 1
-#define BUTT_2 4 // Button 2
-#define BUTT_3 3 // Button 3
-#define MODE_LIM 3 // Limit of display modes.
+#define BUTT_1 9 // Button 1
+#define BUTT_2 7 // Button 2
+#define BUTT_3 8 // Button 3
+#define MODE_LIM 2 // Limit of display modes.
 #define BACKG_NUM 255 // Number of backgrounds  
 #define ACCEL_PORT 0x69 // Wire address of the accelerometer
-#define TIP_POINT 40000 // At what point the dots ball out of place.
+#define TIP_POINT 20000 // At what point the dots ball out of place.
 #define FADE_RATE 2 // Rate at which dots fade colors (has to be a multiple of 2)
 #define RESET 500 // Time before the clock resest the dots
 #define DOT_MOVE 900 // The resistence for dot movment
@@ -100,7 +99,49 @@ class PhotoResistorSmoother{
       int32_t highRead = 1023;
       int32_t lowRead = 0;
 };
+
 //
+ /**
+ * The button class takes in a port number to read.
+ * Call the check function in your loop to check if the button was pressed.
+ * use the result to decide what to do based on how long the button was held down for.
+ */
+
+class GY521Reader {
+
+  public:
+    void begin() {
+      Wire.beginTransmission(Port); // Begins a transmission to the I2C slave (GY-521 board)
+      Wire.write(0x6B); // PWR_MGMT_1 register
+      Wire.write(0); // set to zero (wakes up the MPU-6050)
+      Wire.endTransmission(true);
+    }
+
+    void updateReadings() {
+      Wire.beginTransmission(Port);
+      Wire.write(0x3B);
+      Wire.endTransmission(false); 
+      Wire.requestFrom(Port, 6, true); 
+      // "Wire.read()<<8 | Wire.read();" means two registers are read and stored in the same variable
+      XReading = Wire.read()<<8 | Wire.read(); // reading registers: 0x3B (ACCEL_XOUT_H) and 0x3C (ACCEL_XOUT_L)
+      YReading = Wire.read()<<8 | Wire.read(); // reading registers: 0x3D (ACCEL_YOUT_H) and 0x3E (ACCEL_YOUT_L)
+      ZReading = Wire.read()<<8 | Wire.read(); // reading registers: 0x3F (ACCEL_ZOUT_H) and 0x40 (ACCEL_ZOUT_L)
+      //Serial.println(XReading);
+    }
+
+    // Adjust the return types for different accelerometer orintations.
+    int16_t X() { return YReading / adjuster; }
+    int16_t Y() { return XReading / adjuster; }
+    int16_t Z() { return ZReading / adjuster; }
+
+  private:
+    uint8_t Port = ACCEL_PORT;
+    const int16_t adjuster = 60; 
+    int16_t XReading;
+    int16_t YReading;
+    int16_t ZReading;
+};
+
  /**
  * The button class takes in a port number to read.
  * Call the check function in your loop to check if the button was pressed.
@@ -154,8 +195,6 @@ class ControlBoard{
           PR_Reader.setLimits(B_LOW, B_HIGH);
         }
 
-
-
         int8_t getMode() {
             return Mode;
         }
@@ -168,15 +207,13 @@ class ControlBoard{
             if (!MainButt.isPressed() && MainButt.getCount() > 1) {
               uint32_t count = MainButt.getCount();
               MainButt.clearCount();
-              if (HalfSecond > count) {Mode++; modeLimitCheck(); return Action::ModeChange;}
-              if (count > HalfSecond && MultiSecond > count) {Mode--; modeLimitCheck(); return Action::ModeChange;}
+              if (MultiSecond > count) {Mode++; modeLimitCheck(); return Action::ModeChange;}
               if (count > MultiSecond) {adjustMode = !adjustMode;}
             }
             if (!HourButt.isPressed() && HourButt.getCount() > 1) {
               uint32_t count = HourButt.getCount();
               HourButt.clearCount();
               if (HalfSecond > count) {BGIndex += BG_CHANGE; return Action::BGChange;}
-              if (count > HalfSecond && MultiSecond > count) {BGIndex--; return Action::BGChange;}
             } else if (HourButt.isPressed()) {
               uint32_t count = HourButt.getCount();
               if (count > HalfSecond) { EVERY_N_MILLIS(BG_SPEED) { BGIndex++; } }; 
@@ -569,13 +606,10 @@ class CompleteClock{
 
         void begin() {
           Accelerometer.begin();
-          Accelerometer.measureModeOn();
           BitDotArr[0].begin();
           RTC.begin();
-          ThreeByteClock ByteClock;
-          SixteenBitClock BitClock;
-          ClockDisplays[0] = &ByteClock;
-          ClockDisplays[1] = &BitClock;
+          ClockDisplays[0] = &BitClock;
+          ClockDisplays[1] = &ByteClock;
           MasterPal = MAP_YLWWHITE;
           ClockDisplay::BitDotPointer = BitDotArr;
           ClockDisplay::PalettePointer = MasterPal;
@@ -600,9 +634,11 @@ class CompleteClock{
     private:
         BitDots BitDotArr[BD_NUM];
         RTC_DS1307 RTC;
+        ThreeByteClock ByteClock;
+        SixteenBitClock BitClock;
         ClockDisplay* ClockDisplays[DIS_NUM];
         ControlBoard Controller;
-        ADXL313 Accelerometer;
+        GY521Reader Accelerometer;
         CRGBPalette16 MasterPal;
         CRGBPalette16 BackGroundPal = Rainbow_gp;
         bool GravityMode = false;
@@ -615,11 +651,9 @@ class CompleteClock{
         
 
         void readInputs() {
-          if(Accelerometer.dataReady()) {
-            Accelerometer.readAccel(); // read all 3 axis, they are stored in class variables: myAdxl.x, myAdxl.y and myAdxl.z
-          }
-          x = Accelerometer.x;
-          y = Accelerometer.y;
+          Accelerometer.updateReadings();
+          x = Accelerometer.X();
+          y = Accelerometer.Y() * -1;
           BitDotArr[0].ALL_DOT_BRIGHTNESS(Controller.getPRReading());
         }
 
@@ -637,7 +671,7 @@ class CompleteClock{
         }
 
         void manageDisplayMode() {
-          uint8_t mode = Controller.getMode();
+          int8_t mode = Controller.getMode();
           DotsInUse = ClockDisplays[mode]->requestNumOfDots();
           ClockDisplays[mode]->updateTime(RTC.now());
         }
@@ -645,7 +679,7 @@ class CompleteClock{
         void manageController() {
           switch (Controller.buttonCheck()) {
             case Action::ModeChange:
-              uint8_t mode = Controller.getMode();
+              int8_t mode = Controller.getMode();
               cleanSlate(MAP_YLWWHITE);
               ClockDisplays[mode]->buildClock();
               break;
