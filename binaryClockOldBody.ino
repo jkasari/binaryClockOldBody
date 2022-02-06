@@ -15,7 +15,7 @@
 #define TIP_POINT 20000 // At what point the dots ball out of place.
 #define FADE_RATE 2 // Rate at which dots fade colors (has to be a multiple of 2)
 #define RESET 500 // Time before the clock resest the dots
-#define DOT_MOVE 900 // The resistence for dot movment
+#define DOT_MOVE 700 // The resistence for dot movment
 #define B_HIGH 200 // Brightness high limit
 #define B_LOW 2 // Brightness low limit
 #define BLANK CRGB(0,0,0) // A blank CRGB object.
@@ -26,7 +26,7 @@
 #define BG_BRIGHT 100 // Background brightness
 #define BG_CHANGE 20 // How far the background jumps in the background palette
 #define BG_SPEED 50 // The rate at which you can move through backgrounds
-#define PAL_NUM 7 // The number of palettes.
+#define PAL_NUM 8 // The number of palettes.
 
 
 DEFINE_GRADIENT_PALETTE(MAP_WHITEBLUE) {
@@ -73,6 +73,12 @@ DEFINE_GRADIENT_PALETTE(MAP_BLUEGREENWHT) {
   255, 20, 20, 200
 };
 
+DEFINE_GRADIENT_PALETTE(MAP_PINK) {
+  0, 150, 0, 100,
+  128, 50, 0, 200,
+  255, 150, 0, 100,
+};
+
 const TProgmemRGBGradientPalette_byte* PaletteArr[] = {
 MAP_YLWWHITE,
 MAP_WHITEGREEN,
@@ -80,7 +86,8 @@ MAP_ORGRED,
 MAP_WHITEBLUE,
 MAP_FIRE,
 Rainbow_gp,
-MAP_BLUEGREENWHT
+MAP_BLUEGREENWHT,
+MAP_PINK
 };
 
 
@@ -232,22 +239,23 @@ class ControlBoard{
         }
         
         Action buttonCheck() { // Returns true if it's time to go into time adjust mode
-            int8_t tempMode = Mode;
-            int8_t tempPal = PalIndex;
-            mainButtCheck();
-            hourButtCheck();
-            minuteButtCheck();
-            if (tempMode != Mode) {
-              return Action::ModeChange;
-            }
-            if (tempPal != PalIndex) {
-              return Action::ModeChange;
-            }
-            if (adjustMode) {
-              return Action::TimeAdjust;
-            } else {
-              return Action::DoNothing;
-            }
+            //if (adjustMode) {
+              //return Action::TimeAdjust;
+              //Serial.println("adjust");
+            //} else {
+              int8_t tempMode = Mode;
+              int8_t tempPal = PalIndex;
+              mainButtCheck();
+              hourButtCheck();
+              minuteButtCheck();
+              if (tempMode != Mode) {
+                return Action::ModeChange;
+              }
+              if (tempPal != PalIndex) {
+                return Action::ModeChange;
+              }
+            //}
+            return Action::DoNothing;
         }
 
         void mainButtCheck() {
@@ -256,6 +264,7 @@ class ControlBoard{
               MainButt.clearCount();
               if (MultiSecond > count) {Mode++; modeLimitCheck();}
               if (count > MultiSecond) {adjustMode = !adjustMode;}
+              //adjustMode = !adjustMode;
             }
         }
 
@@ -278,14 +287,17 @@ class ControlBoard{
           }
         }
 
-        //int8_t getHourUpdate() {
-        //    uint32_t count = HourButt.check();
-        //    if (count > 1) {
-        //        if (HalfSecond > count) {return 1;}
-        //        if (count > HalfSecond) {return -1;}
-        //    }
-        //    return 0;
-        //}
+        int8_t getHourUpdate() {
+            if (!HourButt.isPressed() && HourButt.getCount() > 1) {
+              uint32_t count = HourButt.getCount();
+              HourButt.clearCount();
+              if (count > 1) {
+                  if (HalfSecond > count) {return 1;}
+                  if (count > HalfSecond) {return -1;}
+              }
+            }
+            return 0;
+        }
 
         //int8_t getMinuteUpdate() {
         //    uint32_t count = MinButt.check();
@@ -307,9 +319,9 @@ class ControlBoard{
         Button MinButt;
         PhotoResistorSmoother PR_Reader; 
         const uint16_t HalfSecond = 500;
-        const uint16_t MultiSecond = 5000;
+        const uint16_t MultiSecond = 2500;
         int8_t Mode = 0;
-        uint8_t BGIndex = 0;
+        uint8_t BGIndex = random8();
         int8_t PalIndex = 0;
         bool adjustMode = false;
         void modeLimitCheck() {
@@ -703,6 +715,7 @@ class CompleteClock{
         GY521Reader Accelerometer;
         CRGBPalette16 MasterPal;
         CRGBPalette16 BackGroundPal = Rainbow_gp;
+        bool TimeAdjustMode = false;
         bool GravityMode = false;
         int16_t x;
         int16_t y;
@@ -740,6 +753,12 @@ class CompleteClock{
           ClockDisplays[mode]->updateTime(RTC.now());
         }
 
+        void manageTimeAdjust() {
+          DateTime now = RTC.now();
+          DateTime update = DateTime(now.year(), now.month(), now.day(), now.hour() + Controller.getHourUpdate(), now.minute(), now.second());
+          RTC.adjust(update);
+        }
+
         void manageController() {
           switch (Controller.buttonCheck()) {
             case Action::ModeChange:
@@ -749,6 +768,7 @@ class CompleteClock{
               break;
             
             case Action::TimeAdjust:
+              manageTimeAdjust();
               break;
           
             case Action::DoNothing:
