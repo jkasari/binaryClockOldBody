@@ -1,28 +1,32 @@
 #include <FastLED.h>
 #include "RTClib.h"
 #include <Wire.h>
-#include <SparkFunADXL313.h>
 
 #define LED_PIN 6 // Pin for the led matrix data output
 #define LED_NUM 64 // Number of leds in the matrix
 #define BD_NUM 24 // Number of total bit dots needed for all displays.
 #define PR A0 // Photoresitor data in
-#define BUTT_1 5 // Button 1
-#define BUTT_2 4 // Button 2
-#define BUTT_3 3 // Button 3
-#define MODE_LIM 3 // Limit of display modes.
-#define BACKG_NUM 9 // Number of backgrounds  
+#define BUTT_1 9 // Button 1
+#define BUTT_2 7 // Button 2
+#define BUTT_3 8 // Button 3
+#define MODE_LIM 2 // Limit of display modes.
+#define BACKG_NUM 255 // Number of backgrounds  
 #define ACCEL_PORT 0x69 // Wire address of the accelerometer
-#define TIP_POINT 40000 // At what point the dots ball out of place.
+#define TIP_POINT 20000 // At what point the dots ball out of place.
 #define FADE_RATE 2 // Rate at which dots fade colors (has to be a multiple of 2)
 #define RESET 500 // Time before the clock resest the dots
-#define DOT_MOVE 900 // The resistence for dot movment
+#define DOT_MOVE 700 // The resistence for dot movment
 #define B_HIGH 200 // Brightness high limit
 #define B_LOW 2 // Brightness low limit
 #define BLANK CRGB(0,0,0) // A blank CRGB object.
 #define SIX_BIT 6 // Literally the number six.
 #define FOUR_BIT 4 // Literally the number 4
 #define BYTE 8 // Literally the number 8
+#define DIS_NUM 2 // The number of displays
+#define BG_BRIGHT 100 // Background brightness
+#define BG_CHANGE 20 // How far the background jumps in the background palette
+#define BG_SPEED 50 // The rate at which you can move through backgrounds
+#define PAL_NUM 8 // The number of palettes.
 
 
 DEFINE_GRADIENT_PALETTE(MAP_WHITEBLUE) {
@@ -61,7 +65,30 @@ DEFINE_GRADIENT_PALETTE(MAP_FIRE) {
 
 };
 
+DEFINE_GRADIENT_PALETTE(MAP_BLUEGREENWHT) {
+  0, 20, 20, 200,
+  64, 0, 230, 0,
+  128, 75, 75, 75,
+  196, 0, 230, 0,
+  255, 20, 20, 200
+};
 
+DEFINE_GRADIENT_PALETTE(MAP_PINK) {
+  0, 150, 0, 100,
+  128, 50, 0, 200,
+  255, 150, 0, 100,
+};
+
+const TProgmemRGBGradientPalette_byte* PaletteArr[] = {
+MAP_YLWWHITE,
+MAP_WHITEGREEN,
+MAP_ORGRED,
+MAP_WHITEBLUE,
+MAP_FIRE,
+Rainbow_gp,
+MAP_BLUEGREENWHT,
+MAP_PINK
+};
 
 
 
@@ -96,7 +123,55 @@ class PhotoResistorSmoother{
       int32_t highRead = 1023;
       int32_t lowRead = 0;
 };
+
+
+class PaletteMaster {
+  public:
+  private:
+};
+
 //
+ /**
+ * The button class takes in a port number to read.
+ * Call the check function in your loop to check if the button was pressed.
+ * use the result to decide what to do based on how long the button was held down for.
+ */
+
+class GY521Reader {
+
+  public:
+    void begin() {
+      Wire.beginTransmission(Port); // Begins a transmission to the I2C slave (GY-521 board)
+      Wire.write(0x6B); // PWR_MGMT_1 register
+      Wire.write(0); // set to zero (wakes up the MPU-6050)
+      Wire.endTransmission(true);
+    }
+
+    void updateReadings() {
+      Wire.beginTransmission(Port);
+      Wire.write(0x3B);
+      Wire.endTransmission(false); 
+      Wire.requestFrom(Port, 6, true); 
+      // "Wire.read()<<8 | Wire.read();" means two registers are read and stored in the same variable
+      XReading = Wire.read()<<8 | Wire.read(); // reading registers: 0x3B (ACCEL_XOUT_H) and 0x3C (ACCEL_XOUT_L)
+      YReading = Wire.read()<<8 | Wire.read(); // reading registers: 0x3D (ACCEL_YOUT_H) and 0x3E (ACCEL_YOUT_L)
+      ZReading = Wire.read()<<8 | Wire.read(); // reading registers: 0x3F (ACCEL_ZOUT_H) and 0x40 (ACCEL_ZOUT_L)
+      //Serial.println(XReading);
+    }
+
+    // Adjust the return types for different accelerometer orintations.
+    int16_t X() { return YReading / adjuster; }
+    int16_t Y() { return XReading / adjuster; }
+    int16_t Z() { return ZReading / adjuster; }
+
+  private:
+    uint8_t Port = ACCEL_PORT;
+    const int16_t adjuster = 60; 
+    int16_t XReading;
+    int16_t YReading;
+    int16_t ZReading;
+};
+
  /**
  * The button class takes in a port number to read.
  * Call the check function in your loop to check if the button was pressed.
@@ -108,22 +183,32 @@ class Button{
     public:
         Button(uint8_t port) {
             Port = port;
+            pinMode(Port, INPUT_PULLUP);
+        }
+
+        bool isPressed() {
+          if (digitalRead(Port) == LOW) {
+            Count++;
+            return true;
+          } else {
+            return false;
+          }
+        }
+
+        void clearCount() {
+          Count = 0;
         }
         
-        uint32_t check() {
-            uint32_t count = 0;
-            while(digitalRead(Port) == LOW) {
-                count++;
-                delay(1);
-            }
-            return count;
+        uint32_t getCount() {
+            return Count;
         }
 
     private:
+        uint32_t Count = 0; 
         uint8_t Port = 0;
 };
 
-enum class Action{ ModeChange, TimeAdjust, DoNothing, BGChange};
+enum class Action{ ModeChange, TimeAdjust, DoNothing, PaletteChange};
 
 /**
 * The control board has control over all the external controls on the clock.
@@ -141,8 +226,6 @@ class ControlBoard{
           PR_Reader.setLimits(B_LOW, B_HIGH);
         }
 
-
-
         int8_t getMode() {
             return Mode;
         }
@@ -150,43 +233,80 @@ class ControlBoard{
         int8_t getBGIndex() {
             return BGIndex;
         }
+
+        int8_t getPalIndex() {
+          return PalIndex;
+        }
         
         Action buttonCheck() { // Returns true if it's time to go into time adjust mode
-            uint32_t count = MainButt.check();
-            if (count > 1) {
-                if (HalfSecond > count) {Mode++; modeLimitCheck(); return Action::ModeChange;}
-                if (count > HalfSecond && MultiSecond > count) {Mode--; modeLimitCheck(); return Action::ModeChange;}
-                if (count > MultiSecond) {adjustMode = !adjustMode;}
+            //if (adjustMode) {
+              //return Action::TimeAdjust;
+              //Serial.println("adjust");
+            //} else {
+              int8_t tempMode = Mode;
+              int8_t tempPal = PalIndex;
+              mainButtCheck();
+              hourButtCheck();
+              minuteButtCheck();
+              if (tempMode != Mode) {
+                return Action::ModeChange;
+              }
+              if (tempPal != PalIndex) {
+                return Action::ModeChange;
+              }
+            //}
+            return Action::DoNothing;
+        }
+
+        void mainButtCheck() {
+            if (!MainButt.isPressed() && MainButt.getCount() > 1) {
+              uint32_t count = MainButt.getCount();
+              MainButt.clearCount();
+              if (MultiSecond > count) {Mode++; modeLimitCheck();}
+              if (count > MultiSecond) {adjustMode = !adjustMode;}
+              //adjustMode = !adjustMode;
             }
-            count = HourButt.check();
-            if (count > 1) {
-              if (HalfSecond > count) {BGIndex++; BGLimitCheck(); return Action::BGChange;}
-              if (count > HalfSecond && MultiSecond > count) {BGIndex--; BGLimitCheck(); return Action::BGChange;}
+        }
+
+        void hourButtCheck() {
+            if (!HourButt.isPressed() && HourButt.getCount() > 1) {
+              uint32_t count = HourButt.getCount();
+              HourButt.clearCount();
+              if (HalfSecond > count) {BGIndex += BG_CHANGE;}
+            } else if (HourButt.isPressed()) {
+              uint32_t count = HourButt.getCount();
+              if (count > HalfSecond) { EVERY_N_MILLIS(BG_SPEED) { BGIndex++; } }
             }
-            if (adjustMode) {
-              return Action::TimeAdjust;
-            } else {
-              return Action::DoNothing;
-            }
+        }
+
+        void minuteButtCheck() {
+          if (!MinButt.isPressed() && MinButt.getCount() > 1) {
+            uint32_t count = MinButt.getCount();
+            MinButt.clearCount();
+            if (HalfSecond > count) {PalIndex ++; palLimitCheck();}
+          }
         }
 
         int8_t getHourUpdate() {
-            uint32_t count = HourButt.check();
-            if (count > 1) {
-                if (HalfSecond > count) {return 1;}
-                if (count > HalfSecond) {return -1;}
+            if (!HourButt.isPressed() && HourButt.getCount() > 1) {
+              uint32_t count = HourButt.getCount();
+              HourButt.clearCount();
+              if (count > 1) {
+                  if (HalfSecond > count) {return 1;}
+                  if (count > HalfSecond) {return -1;}
+              }
             }
             return 0;
         }
 
-        int8_t getMinuteUpdate() {
-            uint32_t count = MinButt.check();
-            if (count > 1) {
-                if (HalfSecond > count) {return 1;}
-                if (count > HalfSecond) {return -1;}
-            }
-            return 0;
-        }
+        //int8_t getMinuteUpdate() {
+        //    uint32_t count = MinButt.check();
+        //    if (count > 1) {
+        //        if (HalfSecond > count) {return 1;}
+        //        if (count > HalfSecond) {return -1;}
+        //    }
+        //    return 0;
+        //}
 
         int8_t getPRReading() {
           return PR_Reader.getValue();
@@ -199,9 +319,10 @@ class ControlBoard{
         Button MinButt;
         PhotoResistorSmoother PR_Reader; 
         const uint16_t HalfSecond = 500;
-        const uint16_t MultiSecond = 5000;
+        const uint16_t MultiSecond = 2500;
         int8_t Mode = 0;
-        int8_t BGIndex = 0;
+        uint8_t BGIndex = random8();
+        int8_t PalIndex = 0;
         bool adjustMode = false;
         void modeLimitCheck() {
             if (Mode >= MODE_LIM) {
@@ -212,54 +333,15 @@ class ControlBoard{
             }
         }
 
-        void BGLimitCheck() {
-            if (BGIndex >= BACKG_NUM) {
-                BGIndex = 0;
-            } 
-            if (0 > BGIndex) {
-                BGIndex = BACKG_NUM - 1;
-            }
-        }
-
-};
-
-/**
- * The idea with this class was that it would be called in a loop and give you a different color in
- * out of a palette each time it was called.
- * It has a palette point and an indexing data member.
- * You can also create a background with a solid color and it will just return the same color each time
- * it is called. 
- * 
- */
-class BackGround{
-  public:
-      // Doesn't work
-      void createBackGround(CRGBPalette16 *palPoint, uint8_t rate) {
-        ColorPalette = palPoint;
-        Rate = rate;
-      }
-
-      void createBackGround(CRGB color) {
-        SolidColor = color;
-      }
-
-      CRGB getColor() {
-        if (Rate > 0) {
-          EVERY_N_MILLISECONDS(Rate) {
-            Increment++;
-            if (Increment % Rate == 0) {
-              return ColorFromPalette(*ColorPalette, Increment);
-            }
+        void palLimitCheck() {
+          if (PalIndex >= PAL_NUM) {
+            PalIndex = 0;
+          }
+          if (0 > PalIndex) {
+            PalIndex = PAL_NUM - 1;
           }
         }
-        return SolidColor;
-      }
 
-  private:
-      uint8_t Increment; 
-      uint8_t Rate = 0;
-      CRGBPalette16 *ColorPalette;
-      CRGB SolidColor = BLANK;
 };
 
 /**
@@ -285,7 +367,7 @@ class BitDots{
           FastLED.clear();
         }
 
-        void DISPLAY_BACKGROUND(BackGround &BackG) {
+        void DISPLAY_BACKGROUND(CRGB &BackG) {
           for (int i = 0; i < 8; ++i) {
             for (int j = 0; j < 8; ++j) {
               if (!Locations[i][j]) {
@@ -430,8 +512,8 @@ class BitDots{
                 }
             }
 
-          void displayBackground(int8_t location, BackGround &BGColor) {
-            FLEDS[location] = BGColor.getColor();
+          void displayBackground(int8_t location, CRGB &BGColor) {
+            FLEDS[location] = BGColor;
             //FLEDS[location] = ColorFromPalette(FireBackGround, location * 10);
           }
 
@@ -513,40 +595,13 @@ class ClockDisplay {
       uint8_t DotsNeeded;
 };
 
-
-class TestClock:ClockDisplay{
-  public:
-    void buildClock() {
-      setSecondsIndex(0);
-      setMinutesIndex(6);
-      setHoursIndex(12);
-      setDotsNeeded(16);
-      buildBitDigitHorizontal(1, 6, getSecondsIndex(), uint8_t(SIX_BIT));
-      buildBitDigitHorizontal(3, 6, getMinutesIndex(), uint8_t(SIX_BIT));
-      buildBitDigitHorizontal(6, 5, getHoursIndex(), uint8_t(FOUR_BIT));
-      for (int i = 0; i < getDotsNeeded(); ++i) {
-        getBitDot(i).setColorPalette(&getPalette());
-      }
-    }
-
-    void updateTime(DateTime now) {
-      displayTimeAlongDots(getSecondsIndex(), uint8_t(SIX_BIT), now.second());
-      displayTimeAlongDots(getMinutesIndex(), uint8_t(SIX_BIT), now.minute());
-      displayTimeAlongDots(getHoursIndex(), uint8_t(FOUR_BIT), now.hour() % 12);
-    }
-
-    uint8_t requestNumOfDots() {
-      return getDotsNeeded();
-    }
-};
-
 /**
  * This displays time horizontally in 16 bits.
  * two 6 bit arrays handle hours and minutes with the remaining 4 showng hours.
  * It displays white for 0 and yellow for 1. 
  * 
  */
-class SixteenBitWhiteClock:ClockDisplay{
+class SixteenBitClock:public ClockDisplay{
   public:
     void buildClock() {
       setSecondsIndex(0);
@@ -557,37 +612,6 @@ class SixteenBitWhiteClock:ClockDisplay{
       buildBitDigitHorizontal(3, 6, getMinutesIndex(), uint8_t(SIX_BIT));
       buildBitDigitHorizontal(6, 5, getHoursIndex(), uint8_t(FOUR_BIT));
       for (int i = 0; i < getDotsNeeded(); ++i) {
-        getBitDot(i).setColorPalette(&getPalette());
-      }
-    }
-
-    void updateTime(DateTime now) {
-      displayTimeAlongDots(getSecondsIndex(), uint8_t(SIX_BIT), now.second());
-      displayTimeAlongDots(getMinutesIndex(), uint8_t(SIX_BIT), now.minute());
-      displayTimeAlongDots(getHoursIndex(), uint8_t(FOUR_BIT), now.hour() % 12);
-    }
-
-    uint8_t requestNumOfDots() {
-      return getDotsNeeded();
-    }
-};
-
-/**
- * Same as the other 16 bit display only this time the hours minutes and seconds each get
- * their own unique color. 
- * 
- */
-class SixteenBitMultiColClock:ClockDisplay{
-  public:
-    void buildClock() {
-      setSecondsIndex(0);
-      setMinutesIndex(6);
-      setHoursIndex(12);
-      setDotsNeeded(16);
-      buildBitDigitHorizontal(1, 6, getSecondsIndex(), uint8_t(SIX_BIT));
-      buildBitDigitHorizontal(3, 6, getMinutesIndex(), uint8_t(SIX_BIT));
-      buildBitDigitHorizontal(6, 5, getHoursIndex(), uint8_t(FOUR_BIT));
-      for (int i = 0; i < 16; ++i) {
         getBitDot(i).setColorPalette(&getPalette());
       }
     }
@@ -608,7 +632,7 @@ class SixteenBitMultiColClock:ClockDisplay{
  * 
  */
 
-class ThreeByteColorClock:ClockDisplay{
+class ThreeByteClock:public ClockDisplay{
   public:
   // Sets all the fixed x y values and sets the colors for the 3 byte clock.
         void buildClock() {
@@ -656,14 +680,14 @@ class CompleteClock{
 
         void begin() {
           Accelerometer.begin();
-          Accelerometer.measureModeOn();
           BitDotArr[0].begin();
           RTC.begin();
-          createBackGrounds();
-          MasterPal = MAP_ORGRED;
+          ClockDisplays[0] = &BitClock;
+          ClockDisplays[1] = &ByteClock;
+          MasterPal = MAP_YLWWHITE;
           ClockDisplay::BitDotPointer = BitDotArr;
           ClockDisplay::PalettePointer = MasterPal;
-          Clock16Bit.buildClock();
+          ClockDisplays[0]->buildClock();
         }
 
         void runClock() {
@@ -684,33 +708,34 @@ class CompleteClock{
     private:
         BitDots BitDotArr[BD_NUM];
         RTC_DS1307 RTC;
-        SixteenBitWhiteClock Clock16Bit;
-        SixteenBitMultiColClock ColorClock16Bit;
-        ThreeByteColorClock ThreeByteClock;
-        TestClock TestBoi;
+        ThreeByteClock ByteClock;
+        SixteenBitClock BitClock;
+        ClockDisplay* ClockDisplays[DIS_NUM];
         ControlBoard Controller;
-        ADXL313 Accelerometer;
+        GY521Reader Accelerometer;
         CRGBPalette16 MasterPal;
+        CRGBPalette16 BackGroundPal = Rainbow_gp;
+        bool TimeAdjustMode = false;
         bool GravityMode = false;
         int16_t x;
         int16_t y;
+        int16_t z;
         uint8_t DotsInUse = BD_NUM;
         uint16_t tippingPoint = TIP_POINT;
         uint32_t GravityModeTimer = 0;
         uint32_t TimeLimit = RESET;
-        BackGround BackGArr[BACKG_NUM];
+        
 
         void readInputs() {
-          if(Accelerometer.dataReady()) {
-            Accelerometer.readAccel(); // read all 3 axis, they are stored in class variables: myAdxl.x, myAdxl.y and myAdxl.z
-          }
-          x = Accelerometer.x;
-          y = Accelerometer.y;
+          Accelerometer.updateReadings();
+          x = Accelerometer.X();
+          y = Accelerometer.Y() * -1;
+          z = Accelerometer.Z();
           BitDotArr[0].ALL_DOT_BRIGHTNESS(Controller.getPRReading());
         }
 
         void manageGravityMode() {
-          if (pow(y, 2) > tippingPoint) {
+          if (pow(y, 2) > tippingPoint || pow(z, 2) > tippingPoint) {
             GravityMode = true;
             GravityModeTimer = 1;
           } else {
@@ -723,44 +748,27 @@ class CompleteClock{
         }
 
         void manageDisplayMode() {
-          switch(Controller.getMode()) {
-            case 0:
-              DotsInUse = Clock16Bit.requestNumOfDots();
-              Clock16Bit.updateTime(RTC.now());
-              break;
-            
-            case 1:
-              DotsInUse = ColorClock16Bit.requestNumOfDots();
-              ColorClock16Bit.updateTime(RTC.now());
-              break;
+          int8_t mode = Controller.getMode();
+          DotsInUse = ClockDisplays[mode]->requestNumOfDots();
+          ClockDisplays[mode]->updateTime(RTC.now());
+        }
 
-            case 2:
-              DotsInUse = ThreeByteClock.requestNumOfDots();
-              ThreeByteClock.updateTime(RTC.now());
-              break;
-          }
+        void manageTimeAdjust() {
+          DateTime now = RTC.now();
+          DateTime update = DateTime(now.year(), now.month(), now.day(), now.hour() + Controller.getHourUpdate(), now.minute(), now.second());
+          RTC.adjust(update);
         }
 
         void manageController() {
           switch (Controller.buttonCheck()) {
             case Action::ModeChange:
-              switch (Controller.getMode()) {
-                case 0:
-                  cleanSlate(MAP_WHITEGREEN);
-                  Clock16Bit.buildClock();
-                  break;
-                case 1:
-                  cleanSlate(MAP_FIRE);
-                  ColorClock16Bit.buildClock();
-                  break;
-                case 2:
-                  cleanSlate(MAP_YLWWHITE);
-                  ThreeByteClock.buildClock();
-                  break;
-              }
+              int8_t mode = Controller.getMode();
+              cleanSlate(PaletteArr[Controller.getPalIndex()]);
+              ClockDisplays[mode]->buildClock();
               break;
             
             case Action::TimeAdjust:
+              manageTimeAdjust();
               break;
           
             case Action::DoNothing:
@@ -768,7 +776,7 @@ class CompleteClock{
           }
         }
 
-        void cleanSlate(&TProgmemRGBGradientPalette_byte palPoint) {
+        void cleanSlate(TProgmemRGBGradientPalettePtr palPoint) {
           BitDotArr[0].CLEAN_ALL_LOCATIONS();
           for(int i = 0; i < BD_NUM; ++i) {
             BitDotArr[i].hardReset();
@@ -794,31 +802,18 @@ class CompleteClock{
         }
 
         void refreshDots() {
-          BitDotArr[0].DISPLAY_BACKGROUND(BackGArr[Controller.getBGIndex()]);
+          CRGB temp = ColorFromPalette(BackGroundPal, Controller.getBGIndex(), BG_BRIGHT);
+          BitDotArr[0].DISPLAY_BACKGROUND(temp);
           BitDotArr[0].SHOW_ALL_DOTS();
           BitDotArr[0].CLEAR_ALL_DOTS();
         }
 
-        void createBackGrounds() {
-          BackGArr[0].createBackGround(CRGB(0, 0, 0));
-          BackGArr[1].createBackGround(CHSV(0, 255, 70));
-          BackGArr[2].createBackGround(CHSV(32, 255, 70));
-          BackGArr[3].createBackGround(CHSV(64, 255, 70));
-          BackGArr[4].createBackGround(CHSV(96, 255, 70));
-          BackGArr[5].createBackGround(CHSV(128, 255, 70));
-          BackGArr[6].createBackGround(CHSV(150, 255, 70));
-          BackGArr[7].createBackGround(CHSV(192, 255, 70));
-          BackGArr[8].createBackGround(CHSV(224, 255, 70));
-        }
 };
 
 
 CompleteClock TheClock(BUTT_1, BUTT_2, BUTT_3, PR);
 
 void setup() {
-    pinMode(BUTT_1, INPUT_PULLUP);
-    pinMode(BUTT_2, INPUT_PULLUP);
-    pinMode(BUTT_3, INPUT_PULLUP);
     Wire.begin();
     TheClock.begin();
     Serial.begin(115200);
