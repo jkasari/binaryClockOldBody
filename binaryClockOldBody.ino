@@ -125,11 +125,6 @@ class PhotoResistorSmoother{
 };
 
 
-class PaletteMaster {
-  public:
-  private:
-};
-
 //
  /**
  * The button class takes in a port number to read.
@@ -239,10 +234,9 @@ class ControlBoard{
         }
         
         Action buttonCheck() { // Returns true if it's time to go into time adjust mode
-            //if (adjustMode) {
-              //return Action::TimeAdjust;
-              //Serial.println("adjust");
-            //} else {
+            if (adjustMode) {
+              return Action::TimeAdjust;
+            } else {
               int8_t tempMode = Mode;
               int8_t tempPal = PalIndex;
               mainButtCheck();
@@ -254,36 +248,14 @@ class ControlBoard{
               if (tempPal != PalIndex) {
                 return Action::ModeChange;
               }
-            //}
+            }
             return Action::DoNothing;
         }
 
-        void mainButtCheck() {
-            if (!MainButt.isPressed() && MainButt.getCount() > 1) {
-              uint32_t count = MainButt.getCount();
-              MainButt.clearCount();
-              if (MultiSecond > count) {Mode++; modeLimitCheck();}
-              if (count > MultiSecond) {adjustMode = !adjustMode;}
-              //adjustMode = !adjustMode;
-            }
-        }
-
-        void hourButtCheck() {
-            if (!HourButt.isPressed() && HourButt.getCount() > 1) {
-              uint32_t count = HourButt.getCount();
-              HourButt.clearCount();
-              if (HalfSecond > count) {BGIndex += BG_CHANGE;}
-            } else if (HourButt.isPressed()) {
-              uint32_t count = HourButt.getCount();
-              if (count > HalfSecond) { EVERY_N_MILLIS(BG_SPEED) { BGIndex++; } }
-            }
-        }
-
-        void minuteButtCheck() {
-          if (!MinButt.isPressed() && MinButt.getCount() > 1) {
-            uint32_t count = MinButt.getCount();
-            MinButt.clearCount();
-            if (HalfSecond > count) {PalIndex ++; palLimitCheck();}
+        void stayInAdjust() {
+          if (!MainButt.isPressed() && MainButt.getCount() > 1) {
+            MainButt.clearCount();
+            adjustMode = false;
           }
         }
 
@@ -318,8 +290,8 @@ class ControlBoard{
         Button HourButt;
         Button MinButt;
         PhotoResistorSmoother PR_Reader; 
-        const uint16_t HalfSecond = 500;
-        const uint16_t MultiSecond = 2500;
+        const uint16_t HalfSecond = 300;
+        const uint16_t MultiSecond = 1500;
         int8_t Mode = 0;
         uint8_t BGIndex = random8();
         int8_t PalIndex = 0;
@@ -339,6 +311,34 @@ class ControlBoard{
           }
           if (0 > PalIndex) {
             PalIndex = PAL_NUM - 1;
+          }
+        }
+
+        void mainButtCheck() {
+            if (!MainButt.isPressed() && MainButt.getCount() > 1) {
+              uint32_t count = MainButt.getCount();
+              MainButt.clearCount();
+              if (MultiSecond > count) {Mode++; modeLimitCheck();}
+              if (count > MultiSecond) {adjustMode = true;}
+            }
+        }
+
+        void hourButtCheck() {
+            if (!HourButt.isPressed() && HourButt.getCount() > 1) {
+              uint32_t count = HourButt.getCount();
+              HourButt.clearCount();
+              if (HalfSecond > count) {BGIndex += BG_CHANGE;}
+            } else if (HourButt.isPressed()) {
+              uint32_t count = HourButt.getCount();
+              if (count > HalfSecond) { EVERY_N_MILLIS(BG_SPEED) { BGIndex++; } }
+            }
+        }
+
+        void minuteButtCheck() {
+          if (!MinButt.isPressed() && MinButt.getCount() > 1) {
+            uint32_t count = MinButt.getCount();
+            MinButt.clearCount();
+            if (HalfSecond > count) {PalIndex ++; palLimitCheck();}
           }
         }
 
@@ -715,7 +715,6 @@ class CompleteClock{
         GY521Reader Accelerometer;
         CRGBPalette16 MasterPal;
         CRGBPalette16 BackGroundPal = Rainbow_gp;
-        bool TimeAdjustMode = false;
         bool GravityMode = false;
         int16_t x;
         int16_t y;
@@ -754,21 +753,26 @@ class CompleteClock{
         }
 
         void manageTimeAdjust() {
-          DateTime now = RTC.now();
-          DateTime update = DateTime(now.year(), now.month(), now.day(), now.hour() + Controller.getHourUpdate(), now.minute(), now.second());
-          RTC.adjust(update);
+          int8_t temp = Controller.getHourUpdate();
+          if (temp != 0) {
+            DateTime now = RTC.now();
+            DateTime update = DateTime(now.year(), now.month(), now.day(), now.hour() + temp, now.minute(), now.second());
+            RTC.adjust(update);
+          }
         }
 
         void manageController() {
           switch (Controller.buttonCheck()) {
+            case Action::TimeAdjust:
+              Serial.println("Here");
+              Controller.stayInAdjust();
+              manageTimeAdjust();
+              break;
+
             case Action::ModeChange:
               int8_t mode = Controller.getMode();
               cleanSlate(PaletteArr[Controller.getPalIndex()]);
               ClockDisplays[mode]->buildClock();
-              break;
-            
-            case Action::TimeAdjust:
-              manageTimeAdjust();
               break;
           
             case Action::DoNothing:
