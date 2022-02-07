@@ -26,7 +26,7 @@
 #define BG_BRIGHT 100 // Background brightness
 #define BG_CHANGE 20 // How far the background jumps in the background palette
 #define BG_SPEED 50 // The rate at which you can move through backgrounds
-#define PAL_NUM 8 // The number of palettes.
+#define PAL_NUM 9 // The number of palettes.
 
 
 DEFINE_GRADIENT_PALETTE(MAP_WHITEBLUE) {
@@ -54,14 +54,14 @@ DEFINE_GRADIENT_PALETTE(MAP_YLWWHITE) {
 };
 
 DEFINE_GRADIENT_PALETTE(MAP_FIRE) {
-    0, 100, 0, 0,
-    33, 75, 25, 0,
-    66, 100, 0, 0,
-    99, 50, 15, 0,
-    132, 75, 15, 0,
-    185, 80, 0, 0,
-    208, 100, 20, 0,
-    255, 70, 10, 0
+    0, 150, 100, 0,
+    33, 200, 50, 0,
+    66, 100, 150, 0,
+    99, 50, 150, 0,
+    132, 50, 200, 0,
+    185, 100, 150, 0,
+    208, 200, 50, 0,
+    255, 150, 100, 0
 
 };
 
@@ -79,6 +79,12 @@ DEFINE_GRADIENT_PALETTE(MAP_PINK) {
   255, 150, 0, 100,
 };
 
+DEFINE_GRADIENT_PALETTE(MAP_GRNPRPLE) {
+  0, 200, 0, 50,
+  128, 0, 230, 0,
+  255, 200, 0, 50,
+};
+
 const TProgmemRGBGradientPalette_byte* PaletteArr[] = {
 MAP_YLWWHITE,
 MAP_WHITEGREEN,
@@ -87,7 +93,8 @@ MAP_WHITEBLUE,
 MAP_FIRE,
 Rainbow_gp,
 MAP_BLUEGREENWHT,
-MAP_PINK
+MAP_PINK,
+MAP_GRNPRPLE,
 };
 
 
@@ -151,7 +158,6 @@ class GY521Reader {
       XReading = Wire.read()<<8 | Wire.read(); // reading registers: 0x3B (ACCEL_XOUT_H) and 0x3C (ACCEL_XOUT_L)
       YReading = Wire.read()<<8 | Wire.read(); // reading registers: 0x3D (ACCEL_YOUT_H) and 0x3E (ACCEL_YOUT_L)
       ZReading = Wire.read()<<8 | Wire.read(); // reading registers: 0x3F (ACCEL_ZOUT_H) and 0x40 (ACCEL_ZOUT_L)
-      //Serial.println(XReading);
     }
 
     // Adjust the return types for different accelerometer orintations.
@@ -263,22 +269,21 @@ class ControlBoard{
             if (!HourButt.isPressed() && HourButt.getCount() > 1) {
               uint32_t count = HourButt.getCount();
               HourButt.clearCount();
-              if (count > 1) {
-                  if (HalfSecond > count) {return 1;}
-                  if (count > HalfSecond) {return -1;}
-              }
+              if (HalfSecond > count) {return 1;}
+              if (count > HalfSecond) {return -1;}
             }
             return 0;
         }
 
-        //int8_t getMinuteUpdate() {
-        //    uint32_t count = MinButt.check();
-        //    if (count > 1) {
-        //        if (HalfSecond > count) {return 1;}
-        //        if (count > HalfSecond) {return -1;}
-        //    }
-        //    return 0;
-        //}
+        int8_t getMinUpdate() {
+          if (!MinButt.isPressed() && MinButt.getCount() > 1) {
+            uint32_t count = MinButt.getCount();
+            MinButt.clearCount();
+            if (HalfSecond > count) {return 1;}
+            if (count > HalfSecond) {return -1;}
+          }
+          return 0;
+        }
 
         int8_t getPRReading() {
           return PR_Reader.getValue();
@@ -753,10 +758,11 @@ class CompleteClock{
         }
 
         void manageTimeAdjust() {
-          int8_t temp = Controller.getHourUpdate();
-          if (temp != 0) {
+          int8_t tempH = Controller.getHourUpdate();
+          int8_t tempM = Controller.getMinUpdate();
+          if (tempH != 0 || tempM != 0) {
             DateTime now = RTC.now();
-            DateTime update = DateTime(now.year(), now.month(), now.day(), now.hour() + temp, now.minute(), now.second());
+            DateTime update = DateTime(now.year(), now.month(), now.day(), now.hour() + tempH, now.minute() + tempM, now.second());
             RTC.adjust(update);
           }
         }
@@ -764,7 +770,6 @@ class CompleteClock{
         void manageController() {
           switch (Controller.buttonCheck()) {
             case Action::TimeAdjust:
-              Serial.println("Here");
               Controller.stayInAdjust();
               manageTimeAdjust();
               break;
