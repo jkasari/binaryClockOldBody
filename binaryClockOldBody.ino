@@ -6,16 +6,16 @@
 #define LED_NUM 64 // Number of leds in the matrix
 #define BD_NUM 24 // Number of total bit dots needed for all displays.
 #define PR A0 // Photoresitor data in
-#define BUTT_1 9 // Button 1
-#define BUTT_2 7 // Button 2
-#define BUTT_3 8 // Button 3
+#define BUTT_1 3 // Button 1
+#define BUTT_2 4 // Button 2
+#define BUTT_3 5 // Button 3
 #define MODE_LIM 2 // Limit of display modes.
 #define BACKG_NUM 255 // Number of backgrounds  
 #define ACCEL_PORT 0x69 // Wire address of the accelerometer
 #define TIP_POINT 20000 // At what point the dots ball out of place.
 #define FADE_RATE 2 // Rate at which dots fade colors (has to be a multiple of 2)
 #define RESET 500 // Time before the clock resest the dots
-#define DOT_MOVE 700 // The resistence for dot movment
+#define DOT_MOVE 200 // The resistence for dot movment
 #define B_HIGH 200 // Brightness high limit
 #define B_LOW 2 // Brightness low limit
 #define BLANK CRGB(0,0,0) // A blank CRGB object.
@@ -298,7 +298,7 @@ class ControlBoard{
         const uint16_t HalfSecond = 300;
         const uint16_t MultiSecond = 1500;
         int8_t Mode = 0;
-        uint8_t BGIndex = random8();
+        uint8_t BGIndex = random(255);
         int8_t PalIndex = 0;
         bool adjustMode = false;
         void modeLimitCheck() {
@@ -622,6 +622,10 @@ class SixteenBitClock:public ClockDisplay{
     }
 
     void updateTime(DateTime now) {
+      int tempH = now.hour();
+      if (tempH > 12) {
+        tempH -= 12;
+      }
       displayTimeAlongDots(getSecondsIndex(), uint8_t(SIX_BIT), now.second());
       displayTimeAlongDots(getMinutesIndex(), uint8_t(SIX_BIT), now.minute());
       displayTimeAlongDots(getHoursIndex(), uint8_t(FOUR_BIT), now.hour() % 12);
@@ -823,6 +827,7 @@ class CompleteClock{
 CompleteClock TheClock(BUTT_1, BUTT_2, BUTT_3, PR);
 
 void setup() {
+    randomSeed(analogRead(1));
     Wire.begin();
     TheClock.begin();
     Serial.begin(115200);
